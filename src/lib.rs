@@ -2,6 +2,8 @@ use nih_plug::prelude::*;
 use std::sync::Arc;
 // use parking_lot::Mutex;
 
+const MAX_BLOCK_SIZE: usize = 64;
+
 struct NoiseGenerator {
     noise_seed: u32,
 }
@@ -122,7 +124,7 @@ impl Plugin for RX11 {
         },
     ];
 
-    const MIDI_INPUT: MidiConfig = MidiConfig::None;
+    const MIDI_INPUT: MidiConfig = MidiConfig::Basic;
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
 
     type SysExMessage = ();
@@ -136,11 +138,48 @@ impl Plugin for RX11 {
         &mut self,
         buffer: &mut Buffer,
         _aux: &mut AuxiliaryBuffers,
-        _context: &mut impl ProcessContext<Self>
+        context: &mut impl ProcessContext<Self>
     ) -> ProcessStatus {
-        self.synth.render(buffer);
+        let num_samples = buffer.samples();
+        let sample_rate = context.transport().sample_rate;
+        let output = buffer.as_slice();
+        
+        let mut block_start: usize = 0;
+        let mut block_end: usize = MAX_BLOCK_SIZE.min(num_samples);
+        let mut next_event = context.next_event();
 
-        /*
+        while block_start < num_samples {
+            'events: loop {
+                match next_event {
+                    Some(event) if (event.timing() as usize) <= block_start => {
+                        match event {
+                            NoteEvent::NoteOn {
+                                timing,
+                                voice_id,
+                                channel,
+                                note,
+                                velocity,
+                            } => {
+                                self.synth.render(buffer);   
+                            }
+                            _ => { },
+                        }
+
+                        next_event = context.next_event();
+                    }
+                    Some(event) if (event.timing() as usize) < block_end => {
+                        block_end = event.timing() as usize;
+                        break 'events;
+                    }
+                    _ => break 'events,
+                }
+            }
+
+            block_start = block_end;
+            block_end = (block_start + MAX_BLOCK_SIZE).min(num_samples);
+        }
+
+       /*
         for channel_samples in buffer.iter_samples() {
             let output_level = self.params.output_level.smoothed.next();
             
