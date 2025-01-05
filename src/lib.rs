@@ -10,9 +10,7 @@ struct NoiseGenerator {
 
 impl NoiseGenerator {
     fn new() -> Self {
-        Self { 
-            noise_seed: 22222,
-        }
+        Self { noise_seed: 22222 }
     }
     fn reset(&mut self) {
         self.noise_seed = 22222;
@@ -28,6 +26,7 @@ impl NoiseGenerator {
 struct Synth {
     pub noise_mix: f32,
     noise_gen: NoiseGenerator,
+    pub should_be_playing_note: bool, // TESTING
 }
 
 impl Synth {
@@ -35,19 +34,32 @@ impl Synth {
         Self {
             noise_mix: 0.09,
             noise_gen: NoiseGenerator::new(),
+            should_be_playing_note: false, // TESTING
         }
     }
     fn reset(&mut self) {
         self.noise_gen.reset();
     }
 
-    fn render(&mut self, output_buffer: &mut Buffer) {
-        // for each sample, 
+    //fn render(&mut self, output_buffer: &mut Buffer) {
+    fn render(&mut self, output_buffer: &mut [&mut [f32]], block_start: usize, block_end: usize) {
+        for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
+            output_buffer[0][sample_idx] += self.noise_gen.next_value() * self.noise_mix;
+            output_buffer[1][sample_idx] += self.noise_gen.next_value() * self.noise_mix;
+        }
+
+        /*
+
+        // TODO - Unsure if I should follow the example and be passing in a slice or the actual buffer.
+        // The buffer certainly has nicer methods, but I need to take the block size into account for MIDI
+        // events that happen across blocks.
+
         for channel_samples in output_buffer.iter_samples() {
             for sample in channel_samples {
                 *sample = self.noise_gen.next_value() * self.noise_mix;
             }
         }
+        */
     }
 }
 
@@ -70,7 +82,7 @@ impl Default for RX11 {
         Self {
             params: Arc::new(RX11Params::default()),
             synth: Synth::new(),
-       }
+        }
     }
 }
 
@@ -78,25 +90,21 @@ impl Default for RX11Params {
     fn default() -> Self {
         Self {
             output_level: FloatParam::new(
-                    "Output",
-                    util::db_to_gain(0.0),
-                    FloatRange::Skewed {
-                        min: util::db_to_gain(-30.0),
-                        max: util::db_to_gain(6.0),
-                        factor: FloatRange::gain_skew_factor(-30.0, 6.0),
-                    }
-                )
-                .with_smoother(SmoothingStyle::Logarithmic(50.0))
-                .with_unit("dB")
-                .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-                .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-
-            noise_level: FloatParam::new(
-                "Noise",
-                0.3,
-                FloatRange::Linear { min: 0.0, max: 1.0 },
+                "Output",
+                util::db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: util::db_to_gain(-30.0),
+                    max: util::db_to_gain(6.0),
+                    factor: FloatRange::gain_skew_factor(-30.0, 6.0),
+                },
             )
-            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            .with_smoother(SmoothingStyle::Logarithmic(50.0))
+            .with_unit("dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+
+            noise_level: FloatParam::new("Noise", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_rounded(2)),
         }
     }
 }
@@ -134,16 +142,16 @@ impl Plugin for RX11 {
         self.params.clone()
     }
 
-    fn process (
+    fn process(
         &mut self,
         buffer: &mut Buffer,
         _aux: &mut AuxiliaryBuffers,
-        context: &mut impl ProcessContext<Self>
+        context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         let num_samples = buffer.samples();
         let sample_rate = context.transport().sample_rate;
         let output = buffer.as_slice();
-        
+
         let mut block_start: usize = 0;
         let mut block_end: usize = MAX_BLOCK_SIZE.min(num_samples);
         let mut next_event = context.next_event(); // Gets the next NoteEvent
@@ -152,7 +160,7 @@ impl Plugin for RX11 {
             'events: loop {
                 /*
                     TODO - The JUCE version of this does the following.
-                    - Creates a buffer_offset to keep track of where we are in the block of audio. 
+                    - Creates a buffer_offset to keep track of where we are in the block of audio.
                         We want to split each audio block into smaller chunks
                     - For each event, check the following
                         - Get samples in current segment, which is sample_position(event.timing()?) - buffer_offset
@@ -181,9 +189,20 @@ impl Plugin for RX11 {
                                 note,
                                 velocity,
                             } => {
-                                self.synth.render(buffer);   
+                                self.synth.should_be_playing_note = true;
+                                // Don't do the rendering here, but this should take all of the NoteOn info
+                                // and feed it into the synth's state so it can render later on
                             }
-                            _ => { },
+                            NoteEvent::NoteOff {
+                                timing: _,
+                                voice_id: _,
+                                channel: _,
+                                note: _,
+                                velocity: _,
+                            } => {
+                                self.synth.should_be_playing_note = false;
+                            }
+                            _ => {}
                         }
 
                         next_event = context.next_event();
@@ -196,20 +215,19 @@ impl Plugin for RX11 {
                 }
             }
 
+            // Do I really need to fill with silence?
+            //output[0][block_start..block_end].fill(0.0);
+            //output[1][block_start..block_end].fill(0.0);
+
+            // naive rendering for testing
+            if self.synth.should_be_playing_note {
+                self.synth.render(output, block_start, block_end);
+            }
+
             block_start = block_end;
             block_end = (block_start + MAX_BLOCK_SIZE).min(num_samples);
         }
 
-       /*
-        for channel_samples in buffer.iter_samples() {
-            let output_level = self.params.output_level.smoothed.next();
-            
-            for sample in channel_samples {
-                *sample *= output_level;
-            }
-        }
-        */
-        
         ProcessStatus::Normal
     }
 
