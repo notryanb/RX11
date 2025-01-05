@@ -215,9 +215,9 @@ impl Plugin for RX11 {
                 }
             }
 
-            // Do I really need to fill with silence?
-            //output[0][block_start..block_end].fill(0.0);
-            //output[1][block_start..block_end].fill(0.0);
+            // Do I really need to clear the buffer before rendering into it?
+            output[0][block_start..block_end].fill(0.0);
+            output[1][block_start..block_end].fill(0.0);
 
             // naive rendering for testing
             if self.synth.should_be_playing_note {
