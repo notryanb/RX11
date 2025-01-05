@@ -26,6 +26,7 @@ impl NoiseGenerator {
 
 struct Synth {
     pub noise_mix: f32,
+    pub sample_rate: f32,
     noise_gen: NoiseGenerator,
     pub voice: Voice,
 }
@@ -34,6 +35,7 @@ impl Synth {
     fn new() -> Self {
         Self {
             noise_mix: 0.7,
+            sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voice: Default::default(),
         }
@@ -45,7 +47,14 @@ impl Synth {
 
     fn note_on(&mut self, note: u8, velocity: f32) {
         self.voice.note = note;
-        self.voice.velocity = velocity;
+
+        // TODO - Expose these as methods on the voice or maybe on the synth itself?
+        self.voice.oscillator.amplitude = (velocity / MIDI_MAX_VELOCITY) * self.noise_mix;
+        self.voice.oscillator.frequency = 261.63f32;
+        self.voice.oscillator.sample_rate = self.sample_rate;
+        self.voice.oscillator.phase_offset = 0.0;
+
+        self.voice.oscillator.reset();
     }
 
     fn note_off(&mut self, note: u8) {
@@ -62,8 +71,8 @@ impl Synth {
             let mut output_sample = 0.0f32;
 
             if self.voice.note > 0 {
-                output_sample =
-                    noise * (self.voice.velocity as f32 / MIDI_MAX_VELOCITY) * self.noise_mix;
+                output_sample = self.voice.render();
+                //output_sample = noise * (self.voice.velocity as f32 / MIDI_MAX_VELOCITY) * self.noise_mix;
             }
 
             output_buffer[0][sample_idx] += output_sample;
@@ -90,12 +99,18 @@ impl Synth {
 struct Voice {
     pub note: u8,
     pub velocity: f32,
+    pub oscillator: Oscillator,
 }
 
 impl Voice {
     pub fn reset(&mut self) {
         self.note = 0;
         self.velocity = 0.0;
+        self.oscillator.reset();
+    }
+
+    pub fn render(&mut self) -> f32 {
+        self.oscillator.next_sample()
     }
 }
 
@@ -111,6 +126,31 @@ struct RX11Params {
 
     #[id = "noise"]
     pub noise_level: FloatParam,
+}
+
+#[derive(Default)]
+struct Oscillator {
+    amplitude: f32,
+    frequency: f32,
+    sample_rate: f32,
+    phase_offset: f32,
+    sample_idx: i32,
+}
+
+impl Oscillator {
+    fn reset(&mut self) {
+        self.sample_idx = 0;
+    }
+
+    fn next_sample(&mut self) -> f32 {
+        let output_sample = self.amplitude
+            * (std::f32::consts::TAU * self.sample_idx as f32 * self.frequency / self.sample_rate
+                + self.phase_offset)
+                .sin();
+
+        self.sample_idx += 1;
+        output_sample
+    }
 }
 
 impl Default for RX11 {
