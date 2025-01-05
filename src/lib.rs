@@ -146,11 +146,32 @@ impl Plugin for RX11 {
         
         let mut block_start: usize = 0;
         let mut block_end: usize = MAX_BLOCK_SIZE.min(num_samples);
-        let mut next_event = context.next_event();
+        let mut next_event = context.next_event(); // Gets the next NoteEvent
 
         while block_start < num_samples {
             'events: loop {
+                /*
+                    TODO - The JUCE version of this does the following.
+                    - Creates a buffer_offset to keep track of where we are in the block of audio. 
+                        We want to split each audio block into smaller chunks
+                    - For each event, check the following
+                        - Get samples in current segment, which is sample_position(event.timing()?) - buffer_offset
+                        - If there are samples
+                            - render into the output buffer
+                            - increase the buffer_offset by the samples in the current segment
+                        - Handle the MIDI event
+                            - For now, just test by printing info about the MIDI event
+                            - NoteEvent enum docs: https://nih-plug.robbertvanderhelm.nl/nih_plug/midi/enum.NoteEvent.html
+                            - timing, note, velocity, etc...
+                    - Render the audio after the last MIDI event
+                        This is known as "samples_last_segment" and is number of samples in the buffer - buffer_offset
+                    - If there are samples_last_segment
+                        - render into the output buffer
+
+                    - Clear the MIDI messages if possible? I'm guessing this is getting the next event?
+                */
                 match next_event {
+                    // event.timing() gets the note's timing within the buffer
                     Some(event) if (event.timing() as usize) <= block_start => {
                         match event {
                             NoteEvent::NoteOn {
