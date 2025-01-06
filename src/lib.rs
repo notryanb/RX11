@@ -1,6 +1,5 @@
 use nih_plug::prelude::*;
 use std::sync::Arc;
-// use parking_lot::Mutex;
 
 const MAX_BLOCK_SIZE: usize = 64;
 const MIDI_MAX_VELOCITY: f32 = 127.0;
@@ -40,31 +39,32 @@ impl Synth {
             voice: Default::default(),
         }
     }
+
     fn reset(&mut self) {
-        self.noise_gen.reset();
         self.voice.reset();
+        self.noise_gen.reset();
     }
 
-    fn note_on(&mut self, note: u8, velocity: f32) {
+    fn note_on(&mut self, note: i32, velocity: f32) {
         self.voice.note = note;
 
-        // TODO - Expose these as methods on the voice or maybe on the synth itself?
-        self.voice.oscillator.amplitude = (velocity / MIDI_MAX_VELOCITY) * self.noise_mix;
-        self.voice.oscillator.frequency = 261.63f32;
-        self.voice.oscillator.sample_rate = self.sample_rate;
-        self.voice.oscillator.phase_offset = 0.0;
+        // map the MIDI note to frequency
+        // 440 * 2^((note - 69) / 12)
+        let frequency = 440.0 * ((note - 69) as f32 / 12.0).exp2(); 
 
+        // TODO - Expose these as methods on the voice or maybe on the synth itself?
+        self.voice.oscillator.amplitude = (velocity / MIDI_MAX_VELOCITY) * 0.7;
+        self.voice.oscillator.increment = frequency / self.sample_rate;
         self.voice.oscillator.reset();
     }
 
-    fn note_off(&mut self, note: u8) {
+    fn note_off(&mut self, note: i32) {
         if self.voice.note == note {
             self.voice.note = 0;
             self.voice.velocity = 0.0;
         }
     }
 
-    //fn render(&mut self, output_buffer: &mut Buffer) {
     fn render(&mut self, output_buffer: &mut [&mut [f32]], block_start: usize, block_end: usize) {
         for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
             let noise = self.noise_gen.next_value();
@@ -72,7 +72,6 @@ impl Synth {
 
             if self.voice.note > 0 {
                 output_sample = self.voice.render();
-                //output_sample = noise * (self.voice.velocity as f32 / MIDI_MAX_VELOCITY) * self.noise_mix;
             }
 
             output_buffer[0][sample_idx] += output_sample;
@@ -97,7 +96,7 @@ impl Synth {
 /// Produces the next output sample for a given note
 #[derive(Default)]
 struct Voice {
-    pub note: u8,
+    pub note: i32,
     pub velocity: f32,
     pub oscillator: Oscillator,
 }
@@ -114,6 +113,39 @@ impl Voice {
     }
 }
 
+#[derive(Default)]
+struct Oscillator {
+    pub amplitude: f32,
+
+    /// How fast to move through the phase
+    pub increment: f32,
+
+    /// Expected to be a value 0..1 to account for phase wrapping
+    /// It is a "modulo counter" aka "phasor"
+    pub phase: f32,
+
+    sin0: f32,
+    sin1: f32,
+    dsin: f32,
+}
+
+impl Oscillator {
+    fn reset(&mut self) {
+        self.phase = 0.0;
+
+        self.sin0 = self.amplitude * (std::f32::consts::TAU * self.phase).sin();
+        self.sin1 = self.amplitude * (std::f32::consts::TAU * (self.phase - self.increment)).sin();
+        self.dsin = 2.0  * (std::f32::consts::TAU * self.increment).cos();
+    }
+
+    fn next_sample(&mut self) -> f32 {
+        let sinx = self.dsin * self.sin0 - self.sin1;
+        self.sin1 = self.sin0;
+        self.sin0 = sinx;
+        sinx
+    }
+}
+
 struct RX11 {
     params: Arc<RX11Params>,
     synth: Synth,
@@ -126,31 +158,6 @@ struct RX11Params {
 
     #[id = "noise"]
     pub noise_level: FloatParam,
-}
-
-#[derive(Default)]
-struct Oscillator {
-    amplitude: f32,
-    frequency: f32,
-    sample_rate: f32,
-    phase_offset: f32,
-    sample_idx: i32,
-}
-
-impl Oscillator {
-    fn reset(&mut self) {
-        self.sample_idx = 0;
-    }
-
-    fn next_sample(&mut self) -> f32 {
-        let output_sample = self.amplitude
-            * (std::f32::consts::TAU * self.sample_idx as f32 * self.frequency / self.sample_rate
-                + self.phase_offset)
-                .sin();
-
-        self.sample_idx += 1;
-        output_sample
-    }
 }
 
 impl Default for RX11 {
@@ -265,7 +272,7 @@ impl Plugin for RX11 {
                                 note,
                                 velocity,
                             } => {
-                                self.synth.note_on(note, velocity);
+                                self.synth.note_on(note.into(), velocity);
                             }
                             NoteEvent::NoteOff {
                                 timing: _,
@@ -274,7 +281,7 @@ impl Plugin for RX11 {
                                 note,
                                 velocity: _,
                             } => {
-                                self.synth.note_off(note);
+                                self.synth.note_off(note.into());
                             }
                             _ => {}
                         }
