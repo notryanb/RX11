@@ -34,7 +34,7 @@ struct Synth {
 impl Synth {
     fn new() -> Self {
         Self {
-            noise_mix: 0.7,
+            noise_mix: 0.0,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voice: Default::default(),
@@ -49,12 +49,13 @@ impl Synth {
     fn note_on(&mut self, note: i32, velocity: f32) {
         self.voice.note = note;
 
-        // map the MIDI note to frequency
+        // Map the MIDI note: [0..128] to frequency
         // 440 * 2^((note - 69) / 12)
         let frequency = 440.0 * ((note - 69) as f32 / 12.0).exp2();
 
         // TODO - Expose these as methods on the voice or maybe on the synth itself?
-        self.voice.oscillator.amplitude = (velocity / MIDI_MAX_VELOCITY) * 0.7;
+        let temp_vol = 0.5;
+        self.voice.oscillator.amplitude = velocity * temp_vol;
         self.voice.oscillator.period = self.sample_rate / frequency;
         self.voice.oscillator.reset();
     }
@@ -68,29 +69,16 @@ impl Synth {
 
     fn render(&mut self, output_buffer: &mut [&mut [f32]], block_start: usize, block_end: usize) {
         for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
-            let noise = self.noise_gen.next_value();
+            let noise = self.noise_gen.next_value() * self.noise_mix;
             let mut output_sample = 0.0f32;
 
             if self.voice.note > 0 {
-                output_sample = self.voice.render();
+                output_sample = self.voice.render() + noise;
             }
 
             output_buffer[0][sample_idx] += output_sample;
             output_buffer[1][sample_idx] += output_sample;
         }
-
-        /*
-
-        // TODO - Unsure if I should follow the example and be passing in a slice or the actual buffer.
-        // The buffer certainly has nicer methods, but I need to take the block size into account for MIDI
-        // events that happen across blocks.
-
-        for channel_samples in output_buffer.iter_samples() {
-            for sample in channel_samples {
-                *sample = self.noise_gen.next_value() * self.noise_mix;
-            }
-        }
-        */
     }
 }
 
@@ -118,7 +106,6 @@ impl Voice {
     }
 }
 
-#[derive(Default)]
 struct Oscillator {
     pub amplitude: f32,
 
@@ -138,6 +125,22 @@ struct Oscillator {
     sin0: f32,
     sin1: f32,
     dsin: f32,
+}
+
+impl Default for Oscillator {
+    fn default() -> Self {
+        Self {
+            amplitude: 1.0,
+            period: 0.0,
+            increment: 0.0,
+            phase: 0.0,
+            phase_max: 0.0,
+            dc_offset: 0.0,
+            sin0: 0.0,
+            sin1: 0.0,
+            dsin: 0.0,
+        }
+    }
 }
 
 impl Oscillator {
@@ -454,7 +457,7 @@ impl Default for RX11Params {
             .with_unit("%")
             .with_step_size(1.0)
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
-            // ENV
+
             env_attack: FloatParam::new(
                 "Env Attack",
                 0.0,
@@ -560,8 +563,16 @@ impl Default for RX11Params {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
 
-            noise_level: FloatParam::new("Noise", 0.3, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            noise_level: FloatParam::new(
+                "Noise",
+                0.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
         }
     }
 }
@@ -615,26 +626,6 @@ impl Plugin for RX11 {
 
         while block_start < num_samples {
             'events: loop {
-                /*
-                    TODO - The JUCE version of this does the following.
-                    - Creates a buffer_offset to keep track of where we are in the block of audio.
-                        We want to split each audio block into smaller chunks
-                    - For each event, check the following
-                        - Get samples in current segment, which is sample_position(event.timing()?) - buffer_offset
-                        - If there are samples
-                            - render into the output buffer
-                            - increase the buffer_offset by the samples in the current segment
-                        - Handle the MIDI event
-                            - For now, just test by printing info about the MIDI event
-                            - NoteEvent enum docs: https://nih-plug.robbertvanderhelm.nl/nih_plug/midi/enum.NoteEvent.html
-                            - timing, note, velocity, etc...
-                    - Render the audio after the last MIDI event
-                        This is known as "samples_last_segment" and is number of samples in the buffer - buffer_offset
-                    - If there are samples_last_segment
-                        - render into the output buffer
-
-                    - Clear the MIDI messages if possible? I'm guessing this is getting the next event?
-                */
                 match next_event {
                     // event.timing() gets the note's timing within the buffer
                     Some(event) if (event.timing() as usize) <= block_start => {
@@ -643,8 +634,8 @@ impl Plugin for RX11 {
                                 timing,
                                 voice_id,
                                 channel,
-                                note,
-                                velocity,
+                                note, // values are 0..128, maybe I can store as i8 instead of i32?
+                                velocity, // values are 0..1
                             } => {
                                 self.synth.note_on(note.into(), velocity);
                             }
@@ -669,6 +660,11 @@ impl Plugin for RX11 {
                     _ => break 'events,
                 }
             }
+
+            // Parameter stuff...
+            let mut noise_mix = self.params.noise_level.value() / 100.0;
+            noise_mix *= noise_mix;
+            self.synth.noise_mix = noise_mix * 0.06;
 
             // Do I really need to clear the buffer before rendering into it?
             output[0][block_start..block_end].fill(0.0);
