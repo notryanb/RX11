@@ -51,7 +51,7 @@ impl Synth {
 
         // map the MIDI note to frequency
         // 440 * 2^((note - 69) / 12)
-        let frequency = 440.0 * ((note - 69) as f32 / 12.0).exp2(); 
+        let frequency = 440.0 * ((note - 69) as f32 / 12.0).exp2();
 
         // TODO - Expose these as methods on the voice or maybe on the synth itself?
         self.voice.oscillator.amplitude = (velocity / MIDI_MAX_VELOCITY) * 0.7;
@@ -153,10 +153,10 @@ impl Oscillator {
     fn next_sample(&mut self) -> f32 {
         let mut output = 0.0;
         self.phase += self.increment;
-        
+
         if self.phase <= PI_OVER_FOUR {
             let half_period = self.period / 2.0;
-            self.phase_max = (0.5 + half_period).floor() - 0.5; 
+            self.phase_max = (0.5 + half_period).floor() - 0.5;
             self.dc_offset = 0.5 * self.amplitude / self.phase_max;
             self.phase_max *= std::f32::consts::PI;
             self.increment = self.phase_max / half_period;
@@ -166,23 +166,23 @@ impl Oscillator {
             self.sin1 = self.amplitude * (self.phase - self.increment).sin();
             self.dsin = 2.0 * self.increment.cos();
 
-            if self.phase * self.phase > 1e-9 { 
+            if self.phase * self.phase > 1e-9 {
                 output = self.sin0 / self.phase;
             } else {
                 output = self.amplitude;
             }
         } else {
             if self.phase > self.phase_max {
-                self.phase = self.phase_max + self.phase_max - self.phase; 
+                self.phase = self.phase_max + self.phase_max - self.phase;
                 self.increment = -self.increment;
             }
 
-            let sinp = self.dsin * self.sin0 - self.sin1; 
+            let sinp = self.dsin * self.sin0 - self.sin1;
             self.sin1 = self.sin0;
             self.sin0 = sinp;
             output = sinp / self.phase;
         }
-        
+
         output - self.dc_offset
     }
 }
@@ -194,11 +194,84 @@ struct RX11 {
 
 #[derive(Params)]
 struct RX11Params {
-    #[id = "output"]
-    pub output_level: FloatParam,
+    #[id = "osc_mix"]
+    pub osc_mix: FloatParam,
+
+    #[id = "osc_tune"]
+    pub osc_tune: FloatParam,
+
+    #[id = "osc_fine_tune"]
+    pub osc_fine_tune: FloatParam,
+
+    // TODO - Figure out what type of param is a "choice"
+    //#[id = "glide_mode"]
+    //pub glide_mode: FloatParam,
+
+    // TODO - Figure out what type of param is a "choice"
+    //#[id = "poly_mode"]
+    //pub poly_mode: FloatParam,
+    #[id = "glide_rate"]
+    pub glide_rate: FloatParam,
+
+    #[id = "glide_bend"]
+    pub glide_bend: FloatParam,
+
+    #[id = "filter_freq"]
+    pub filter_freq: FloatParam,
+
+    #[id = "filter_reso"]
+    pub filter_reso: FloatParam,
+
+    #[id = "filter_env"]
+    pub filter_env: FloatParam,
+
+    #[id = "filter_lfo"]
+    pub filter_lfo: FloatParam,
+
+    #[id = "filter_velocity"]
+    pub filter_velocity: FloatParam,
+
+    #[id = "filter_attack"]
+    pub filter_attack: FloatParam,
+
+    #[id = "filter_decay"]
+    pub filter_decay: FloatParam,
+
+    #[id = "filter_sustain"]
+    pub filter_sustain: FloatParam,
+
+    #[id = "filter_release"]
+    pub filter_release: FloatParam,
+
+    #[id = "env_attack"]
+    pub env_attack: FloatParam,
+
+    #[id = "env_decay"]
+    pub env_decay: FloatParam,
+
+    #[id = "env_sustain"]
+    pub env_sustain: FloatParam,
+
+    #[id = "env_release"]
+    pub env_release: FloatParam,
+
+    #[id = "lfo_rate"]
+    pub lfo_rate: FloatParam,
+
+    #[id = "vibrato"]
+    pub vibrato: FloatParam,
 
     #[id = "noise"]
     pub noise_level: FloatParam,
+
+    #[id = "octave"]
+    pub octave: FloatParam,
+
+    #[id = "tuning"]
+    pub tuning: FloatParam,
+
+    #[id = "output"]
+    pub output_level: FloatParam,
 }
 
 impl Default for RX11 {
@@ -213,6 +286,266 @@ impl Default for RX11 {
 impl Default for RX11Params {
     fn default() -> Self {
         Self {
+            osc_mix: FloatParam::new(
+                "Osc Mix",
+                0.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            ) // TODO - implement the function from the book which shows the ratio 50:50 for fullly mixed
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            osc_tune: FloatParam::new(
+                "Osc Tune",
+                -12.0,
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
+            )
+            .with_unit("semi")
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            osc_fine_tune: FloatParam::new(
+                "Osc Fine Tune",
+                0.0,
+                FloatRange::SymmetricalSkewed {
+                    min: -50.0,
+                    max: 50.0,
+                    factor: 0.3, //FloatRange::skew_factor(-50.0, 50.0),
+                    center: 0.0,
+                },
+            )
+            .with_step_size(0.1)
+            .with_unit("cent")
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            glide_rate: FloatParam::new(
+                "Glide Rate",
+                35.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_step_size(1.0)
+            .with_unit("%")
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            glide_bend: FloatParam::new(
+                "Glide Bend",
+                0.0,
+                FloatRange::SymmetricalSkewed {
+                    min: -36.0,
+                    max: 36.0,
+                    factor: 0.01, //FloatRange::skew_factor(-50.0, 50.0),
+                    center: 0.0,
+                },
+            )
+            .with_step_size(0.4)
+            .with_unit("semi")
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_freq: FloatParam::new(
+                "Filter Freq",
+                100.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(0.1)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_reso: FloatParam::new(
+                "Filter Reso",
+                15.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_env: FloatParam::new(
+                "Filter Env",
+                50.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(0.1)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_lfo: FloatParam::new(
+                "Filter LFO",
+                0.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_velocity: FloatParam::new(
+                "Filter Velocity",
+                0.0,
+                FloatRange::Linear {
+                    min: -100.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%") // TODO: Should have a custom formatter which sets to "OFF" when < -90.0f32
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_attack: FloatParam::new(
+                "Filter Attack",
+                0.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_decay: FloatParam::new(
+                "Filter Decay",
+                30.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_sustain: FloatParam::new(
+                "Filter Sustain",
+                0.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            filter_release: FloatParam::new(
+                "Filter Release",
+                25.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            // ENV
+            env_attack: FloatParam::new(
+                "Env Attack",
+                0.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            env_decay: FloatParam::new(
+                "Env Decay",
+                50.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            env_sustain: FloatParam::new(
+                "Env Sustain",
+                100.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            env_release: FloatParam::new(
+                "Env Release",
+                30.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("%")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            // TODO: LFO Rate needs a custom formatter which converts the 0..1 range to Hz ``(7.0 * value - 4.0).exp`
+            lfo_rate: FloatParam::new("LFO Rate", 0.81, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("Hz")
+                .with_step_size(0.01)
+                .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            // TODO: Vibrato needs custom formatter which says "PWM" if < 0.0f32
+            vibrato: FloatParam::new(
+                "Vibrato",
+                0.0,
+                FloatRange::Linear {
+                    min: -100.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("Hz")
+            .with_step_size(0.1)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            octave: FloatParam::new(
+                "Octave",
+                0.0,
+                FloatRange::Linear {
+                    min: -2.0,
+                    max: 2.0,
+                },
+            )
+            .with_unit("''")
+            .with_step_size(1.0)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            tuning: FloatParam::new(
+                "Tuning",
+                0.0,
+                FloatRange::Linear {
+                    min: -100.0,
+                    max: 100.0,
+                },
+            )
+            .with_unit("cent")
+            .with_step_size(0.1)
+            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
             output_level: FloatParam::new(
                 "Output",
                 util::db_to_gain(0.0),
