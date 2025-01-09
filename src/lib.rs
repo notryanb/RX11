@@ -1,6 +1,7 @@
 use nih_plug::prelude::*;
 use std::sync::Arc;
 
+mod envelope;
 mod noise_generator;
 mod oscillator;
 mod synth;

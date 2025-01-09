@@ -1,3 +1,4 @@
+use crate::envelope::Envelope;
 use crate::oscillator::Oscillator;
 
 /// Produces the next output sample for a given note
@@ -7,6 +8,7 @@ pub struct Voice {
     pub velocity: f32,
     pub saw: f32,
     pub oscillator: Oscillator,
+    pub envelope: Envelope,
 }
 
 impl Voice {
@@ -20,6 +22,8 @@ impl Voice {
     pub fn render(&mut self) -> f32 {
         let mut sample = self.oscillator.next_sample();
         self.saw = self.saw * 0.997 + sample;
-        self.saw
+
+        let envelope = self.envelope.next_value();
+        self.saw * envelope
     }
 }

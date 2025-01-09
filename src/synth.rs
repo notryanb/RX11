@@ -35,6 +35,7 @@ impl Synth {
         self.voice.oscillator.amplitude = velocity * temp_vol;
         self.voice.oscillator.period = self.sample_rate / frequency;
         self.voice.oscillator.reset();
+        self.voice.envelope.level = 1.0;
     }
 
     pub fn note_off(&mut self, note: i32) {
