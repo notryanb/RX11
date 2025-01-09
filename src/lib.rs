@@ -1,194 +1,14 @@
 use nih_plug::prelude::*;
 use std::sync::Arc;
 
+mod noise_generator;
+mod oscillator;
+mod synth;
+mod voice;
+
+use crate::synth::Synth;
+
 const MAX_BLOCK_SIZE: usize = 64;
-const MIDI_MAX_VELOCITY: f32 = 127.0;
-const PI_OVER_FOUR: f32 = std::f32::consts::PI / 4.0; //0.7853981633974483;
-
-struct NoiseGenerator {
-    noise_seed: u32,
-}
-
-impl NoiseGenerator {
-    fn new() -> Self {
-        Self { noise_seed: 22222 }
-    }
-    fn reset(&mut self) {
-        self.noise_seed = 22222;
-    }
-
-    fn next_value(&mut self) -> f32 {
-        self.noise_seed = self.noise_seed * 196314165 + 907633515;
-        let temp = ((self.noise_seed >> 7) as i32) - 16777216;
-        temp as f32 / 16777216.0f32
-    }
-}
-
-struct Synth {
-    pub noise_mix: f32,
-    pub sample_rate: f32,
-    noise_gen: NoiseGenerator,
-    pub voice: Voice,
-}
-
-impl Synth {
-    fn new() -> Self {
-        Self {
-            noise_mix: 0.0,
-            sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
-            noise_gen: NoiseGenerator::new(),
-            voice: Default::default(),
-        }
-    }
-
-    fn reset(&mut self) {
-        self.voice.reset();
-        self.noise_gen.reset();
-    }
-
-    fn note_on(&mut self, note: i32, velocity: f32) {
-        self.voice.note = note;
-
-        // Map the MIDI note: [0..128] to frequency
-        // 440 * 2^((note - 69) / 12)
-        let frequency = 440.0 * ((note - 69) as f32 / 12.0).exp2();
-
-        // TODO - Expose these as methods on the voice or maybe on the synth itself?
-        let temp_vol = 0.5;
-        self.voice.oscillator.amplitude = velocity * temp_vol;
-        self.voice.oscillator.period = self.sample_rate / frequency;
-        self.voice.oscillator.reset();
-    }
-
-    fn note_off(&mut self, note: i32) {
-        if self.voice.note == note {
-            self.voice.note = 0;
-            self.voice.velocity = 0.0;
-        }
-    }
-
-    fn render(&mut self, output_buffer: &mut [&mut [f32]], block_start: usize, block_end: usize) {
-        for (value_idx, sample_idx) in (block_start..block_end).enumerate() {
-            let noise = self.noise_gen.next_value() * self.noise_mix;
-            let mut output_sample = 0.0f32;
-
-            if self.voice.note > 0 {
-                output_sample = self.voice.render() + noise;
-            }
-
-            output_buffer[0][sample_idx] += output_sample;
-            output_buffer[1][sample_idx] += output_sample;
-        }
-    }
-}
-
-/// Produces the next output sample for a given note
-#[derive(Default)]
-struct Voice {
-    pub note: i32,
-    pub velocity: f32,
-    pub saw: f32,
-    pub oscillator: Oscillator,
-}
-
-impl Voice {
-    pub fn reset(&mut self) {
-        self.note = 0;
-        self.velocity = 0.0;
-        self.saw = 0.0;
-        self.oscillator.reset();
-    }
-
-    pub fn render(&mut self) -> f32 {
-        let mut sample = self.oscillator.next_sample();
-        self.saw = self.saw * 0.997 + sample;
-        self.saw
-    }
-}
-
-struct Oscillator {
-    pub amplitude: f32,
-
-    pub period: f32,
-
-    /// How fast to move through the phase
-    pub increment: f32,
-
-    /// Expected to be a value 0..1 to account for phase wrapping
-    /// It is a "modulo counter" aka "phasor"
-    pub phase: f32,
-
-    phase_max: f32,
-
-    dc_offset: f32,
-
-    sin0: f32,
-    sin1: f32,
-    dsin: f32,
-}
-
-impl Default for Oscillator {
-    fn default() -> Self {
-        Self {
-            amplitude: 1.0,
-            period: 0.0,
-            increment: 0.0,
-            phase: 0.0,
-            phase_max: 0.0,
-            dc_offset: 0.0,
-            sin0: 0.0,
-            sin1: 0.0,
-            dsin: 0.0,
-        }
-    }
-}
-
-impl Oscillator {
-    fn reset(&mut self) {
-        self.increment = 0.0;
-        self.dc_offset = 0.0;
-        self.phase = 0.0;
-        self.sin0 = 0.0;
-        self.sin1 = 0.0;
-        self.dsin = 0.0;
-    }
-
-    fn next_sample(&mut self) -> f32 {
-        let mut output = 0.0;
-        self.phase += self.increment;
-
-        if self.phase <= PI_OVER_FOUR {
-            let half_period = self.period / 2.0;
-            self.phase_max = (0.5 + half_period).floor() - 0.5;
-            self.dc_offset = 0.5 * self.amplitude / self.phase_max;
-            self.phase_max *= std::f32::consts::PI;
-            self.increment = self.phase_max / half_period;
-            self.phase = -self.phase;
-
-            self.sin0 = self.amplitude * self.phase.sin();
-            self.sin1 = self.amplitude * (self.phase - self.increment).sin();
-            self.dsin = 2.0 * self.increment.cos();
-
-            if self.phase * self.phase > 1e-9 {
-                output = self.sin0 / self.phase;
-            } else {
-                output = self.amplitude;
-            }
-        } else {
-            if self.phase > self.phase_max {
-                self.phase = self.phase_max + self.phase_max - self.phase;
-                self.increment = -self.increment;
-            }
-
-            let sinp = self.dsin * self.sin0 - self.sin1;
-            self.sin1 = self.sin0;
-            self.sin0 = sinp;
-            output = sinp / self.phase;
-        }
-
-        output - self.dc_offset
-    }
-}
 
 struct RX11 {
     params: Arc<RX11Params>,
@@ -662,6 +482,11 @@ impl Plugin for RX11 {
             }
 
             // Parameter stuff...
+            // TODO: Eventually all other params will be here and can potentially be expensive
+            // to calculate their values on every process block iteration.
+            // JUCE has a way to check if the parameter raw value changed and only perform calculations
+            // when necessary.
+            // Essentially an atomic boolean is used in the JUCE examples which indicates if a parameter changed.
             let mut noise_mix = self.params.noise_level.value() / 100.0;
             noise_mix *= noise_mix;
             self.synth.noise_mix = noise_mix * 0.06;
