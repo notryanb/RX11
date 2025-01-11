@@ -5,7 +5,6 @@ use crate::oscillator::Oscillator;
 #[derive(Default)]
 pub struct Voice {
     pub note: i32,
-    pub velocity: f32,
     pub saw: f32,
     pub oscillator: Oscillator,
     pub envelope: Envelope,
@@ -14,16 +13,26 @@ pub struct Voice {
 impl Voice {
     pub fn reset(&mut self) {
         self.note = 0;
-        self.velocity = 0.0;
         self.saw = 0.0;
         self.oscillator.reset();
+        self.envelope.reset();
     }
 
-    pub fn render(&mut self) -> f32 {
-        let mut sample = self.oscillator.next_sample();
+    // Mixes the oscillator, noise, and envelope together
+    pub fn render(&mut self, input: f32) -> f32 {
+        let sample = self.oscillator.next_sample();
+
+        // This is a leaky integrator
         self.saw = self.saw * 0.997 + sample;
 
+        let output = self.saw + input;
+
         let envelope = self.envelope.next_value();
-        self.saw * envelope
+        output * envelope
+        //envelope // Return only the envelope to view it in an oscilloscope
+    }
+
+    pub fn release(&mut self) {
+        self.envelope.release();
     }
 }

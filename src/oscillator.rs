@@ -48,7 +48,7 @@ impl Oscillator {
     }
 
     pub fn next_sample(&mut self) -> f32 {
-        let mut output = 0.0;
+        let output;
         self.phase += self.increment;
 
         if self.phase <= PI_OVER_FOUR {

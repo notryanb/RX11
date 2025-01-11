@@ -10,6 +10,7 @@ mod voice;
 use crate::synth::Synth;
 
 const MAX_BLOCK_SIZE: usize = 64;
+//const SILENCE: f32 = 0.0001; // -80db = 20 * log(0.0001)
 
 struct RX11 {
     params: Arc<RX11Params>,
@@ -439,6 +440,7 @@ impl Plugin for RX11 {
     ) -> ProcessStatus {
         let num_samples = buffer.samples();
         let sample_rate = context.transport().sample_rate;
+        let inverse_sample_rate = 1.0 / sample_rate;
         let output = buffer.as_slice();
 
         let mut block_start: usize = 0;
@@ -452,9 +454,9 @@ impl Plugin for RX11 {
                     Some(event) if (event.timing() as usize) <= block_start => {
                         match event {
                             NoteEvent::NoteOn {
-                                timing,
-                                voice_id,
-                                channel,
+                                timing: _,
+                                voice_id: _,
+                                channel: _,
                                 note, // values are 0..128, maybe I can store as i8 instead of i32?
                                 velocity, // values are 0..1
                             } => {
@@ -488,6 +490,22 @@ impl Plugin for RX11 {
             // JUCE has a way to check if the parameter raw value changed and only perform calculations
             // when necessary.
             // Essentially an atomic boolean is used in the JUCE examples which indicates if a parameter changed.
+            self.synth.env_attack =
+                (-inverse_sample_rate * (5.5 - 0.075 * self.params.env_attack.value()).exp()).exp();
+
+            self.synth.env_decay =
+                (-inverse_sample_rate * (5.5 - 0.075 * self.params.env_decay.value()).exp()).exp();
+
+            self.synth.env_sustain = self.params.env_sustain.value() / 100.0;
+
+            let env_release = self.params.env_release.value();
+            if env_release < 1.0 {
+                self.synth.env_release = 0.75; // Extra fast release
+            } else {
+                self.synth.env_release =
+                    (-inverse_sample_rate * (5.5 - 0.075 * env_release.exp())).exp();
+            }
+
             let mut noise_mix = self.params.noise_level.value() / 100.0;
             noise_mix *= noise_mix;
             self.synth.noise_mix = noise_mix * 0.06;
