@@ -72,8 +72,8 @@ impl Synth {
                 output_sample = self.voice.render(noise);
             }
 
-            output_buffer[0][sample_idx] += output_sample;
-            output_buffer[1][sample_idx] += output_sample;
+            output_buffer[0][sample_idx] = output_sample;
+            output_buffer[1][sample_idx] = output_sample;
         }
 
         if !self.voice.envelope.is_active() {

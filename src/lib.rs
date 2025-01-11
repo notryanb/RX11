@@ -10,7 +10,6 @@ mod voice;
 use crate::synth::Synth;
 
 const MAX_BLOCK_SIZE: usize = 64;
-//const SILENCE: f32 = 0.0001; // -80db = 20 * log(0.0001)
 
 struct RX11 {
     params: Arc<RX11Params>,
@@ -503,7 +502,7 @@ impl Plugin for RX11 {
                 self.synth.env_release = 0.75; // Extra fast release
             } else {
                 self.synth.env_release =
-                    (-inverse_sample_rate * (5.5 - 0.075 * env_release.exp())).exp();
+                    (-inverse_sample_rate * (5.5 - 0.075 * env_release).exp()).exp();
             }
 
             let mut noise_mix = self.params.noise_level.value() / 100.0;
