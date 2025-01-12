@@ -505,6 +505,8 @@ impl Plugin for RX11 {
                     (-inverse_sample_rate * (5.5 - 0.075 * env_release).exp()).exp();
             }
 
+            self.synth.osc_mix = self.params.osc_mix.value() / 100.0;
+
             let mut noise_mix = self.params.noise_level.value() / 100.0;
             noise_mix *= noise_mix;
             self.synth.noise_mix = noise_mix * 0.06;

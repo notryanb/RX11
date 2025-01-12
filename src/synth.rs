@@ -8,6 +8,7 @@ pub struct Synth {
     pub env_decay: f32,
     pub env_sustain: f32,
     pub env_release: f32,
+    pub osc_mix: f32,
     noise_gen: NoiseGenerator,
     pub voice: Voice,
 }
@@ -20,6 +21,7 @@ impl Synth {
             env_decay: 0.0,
             env_sustain: 0.0,
             env_release: 0.0,
+            osc_mix: 0.0,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voice: Default::default(),
@@ -40,9 +42,13 @@ impl Synth {
 
         // TODO - Expose these as methods on the voice or maybe on the synth itself?
         let temp_vol = 0.5;
-        self.voice.oscillator.amplitude = velocity * temp_vol;
-        self.voice.oscillator.period = self.sample_rate / frequency;
-        self.voice.oscillator.reset();
+        self.voice.oscillator_1.amplitude = velocity * temp_vol;
+        self.voice.oscillator_1.period = self.sample_rate / frequency;
+        self.voice.oscillator_1.reset();
+        
+        self.voice.oscillator_2.amplitude = self.voice.oscillator_1.amplitude * self.osc_mix;
+        self.voice.oscillator_2.period = self.voice.oscillator_1.period * 0.994;
+        self.voice.oscillator_2.reset();
 
         let env = &mut self.voice.envelope;
         env.attack_multiplier = self.env_attack;
