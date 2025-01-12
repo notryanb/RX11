@@ -489,6 +489,8 @@ impl Plugin for RX11 {
             // JUCE has a way to check if the parameter raw value changed and only perform calculations
             // when necessary.
             // Essentially an atomic boolean is used in the JUCE examples which indicates if a parameter changed.
+
+            // ADSR Envelope
             self.synth.env_attack =
                 (-inverse_sample_rate * (5.5 - 0.075 * self.params.env_attack.value()).exp()).exp();
 
@@ -505,8 +507,13 @@ impl Plugin for RX11 {
                     (-inverse_sample_rate * (5.5 - 0.075 * env_release).exp()).exp();
             }
 
+            // Oscillator Tuning
+            let semi = self.params.osc_tune.value();
+            let cent = self.params.osc_fine_tune.value();
+            self.synth.detune = 1.059463094359_f32.powf(-semi - 0.01 * cent); // Total detuning in semitones
             self.synth.osc_mix = self.params.osc_mix.value() / 100.0;
 
+            // Noise
             let mut noise_mix = self.params.noise_level.value() / 100.0;
             noise_mix *= noise_mix;
             self.synth.noise_mix = noise_mix * 0.06;

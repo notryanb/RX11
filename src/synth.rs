@@ -9,6 +9,7 @@ pub struct Synth {
     pub env_sustain: f32,
     pub env_release: f32,
     pub osc_mix: f32,
+    pub detune: f32,
     noise_gen: NoiseGenerator,
     pub voice: Voice,
 }
@@ -22,6 +23,7 @@ impl Synth {
             env_sustain: 0.0,
             env_release: 0.0,
             osc_mix: 0.0,
+            detune: 0.0,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voice: Default::default(),
@@ -47,7 +49,7 @@ impl Synth {
         self.voice.oscillator_1.reset();
         
         self.voice.oscillator_2.amplitude = self.voice.oscillator_1.amplitude * self.osc_mix;
-        self.voice.oscillator_2.period = self.voice.oscillator_1.period * 0.994;
+        self.voice.oscillator_2.period = self.voice.oscillator_1.period * self.detune;
         self.voice.oscillator_2.reset();
 
         let env = &mut self.voice.envelope;
