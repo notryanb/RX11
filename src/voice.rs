@@ -6,6 +6,7 @@ use crate::oscillator::Oscillator;
 pub struct Voice {
     pub note: i32,
     pub saw: f32,
+    pub period: f32,
     pub oscillator_1: Oscillator,
     pub oscillator_2: Oscillator,
     pub envelope: Envelope,

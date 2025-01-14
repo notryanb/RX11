@@ -508,6 +508,11 @@ impl Plugin for RX11 {
             }
 
             // Oscillator Tuning
+            let octave = self.params.octave.value();
+            let tuning = self.params.tuning.value();
+            let tune_in_semi = -36.3763 - 12.0 * octave - tuning / 100.0;
+            self.synth.tune = sample_rate * (0.05776226505 * tune_in_semi).exp();
+            
             let semi = self.params.osc_tune.value();
             let cent = self.params.osc_fine_tune.value();
             self.synth.detune = 1.059463094359_f32.powf(-semi - 0.01 * cent); // Total detuning in semitones

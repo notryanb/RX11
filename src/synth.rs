@@ -10,6 +10,7 @@ pub struct Synth {
     pub env_release: f32,
     pub osc_mix: f32,
     pub detune: f32,
+    pub tune: f32,
     noise_gen: NoiseGenerator,
     pub voice: Voice,
 }
@@ -24,6 +25,7 @@ impl Synth {
             env_release: 0.0,
             osc_mix: 0.0,
             detune: 0.0,
+            tune: 0.0,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voice: Default::default(),
@@ -40,16 +42,15 @@ impl Synth {
 
         // Map the MIDI note: [0..128] to frequency
         // 440 * 2^((note - 69) / 12)
-        let frequency = 440.0 * ((note - 69) as f32 / 12.0).exp2();
+        let frequency = 440.0 * (((note - 69) as f32 + self.tune) / 12.0).exp2();
+        self.voice.period = self.calculate_period(note);
 
         // TODO - Expose these as methods on the voice or maybe on the synth itself?
         let temp_vol = 0.5;
         self.voice.oscillator_1.amplitude = velocity * temp_vol;
-        self.voice.oscillator_1.period = self.sample_rate / frequency;
         self.voice.oscillator_1.reset();
         
         self.voice.oscillator_2.amplitude = self.voice.oscillator_1.amplitude * self.osc_mix;
-        self.voice.oscillator_2.period = self.voice.oscillator_1.period * self.detune;
         self.voice.oscillator_2.reset();
 
         let env = &mut self.voice.envelope;
@@ -66,12 +67,25 @@ impl Synth {
         }
     }
 
+    pub fn calculate_period(&self, note: i32) -> f32 {
+        let mut period = self.tune * (-0.05776226505 * note as f32).exp();
+
+        // Ensure the period for the detuned oscillator is at least six samples long
+        while period < 6.0 || period * self.detune < 6.0 { 
+            period += period; 
+        }
+        period
+    }
+
     pub fn render(
         &mut self,
         output_buffer: &mut [&mut [f32]],
         block_start: usize,
         block_end: usize,
     ) {
+        self.voice.oscillator_1.period = self.voice.period;
+        self.voice.oscillator_2.period = self.voice.oscillator_1.period * self.detune;
+
         for (_value_idx, sample_idx) in (block_start..block_end).enumerate() {
             let noise = self.noise_gen.next_value() * self.noise_mix;
             let mut output_sample = 0.0;
