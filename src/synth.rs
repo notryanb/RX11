@@ -2,6 +2,8 @@ use crate::noise_generator::NoiseGenerator;
 use crate::voice::Voice;
 
 pub const MAX_VOICES: usize = 8;
+pub const ANALOG: f32 = 0.002;
+pub const SUSTAIN: i32 = -1;
 
 pub struct Synth {
     pub noise_mix: f32,
@@ -15,6 +17,7 @@ pub struct Synth {
     pub tune: f32,
     pub pitch_bend: f32,
     pub num_voices: usize,
+    pub is_sustained: bool,
     noise_gen: NoiseGenerator,
     pub voices: [Voice; MAX_VOICES],
 }
@@ -32,6 +35,7 @@ impl Synth {
             tune: 0.0,
             pitch_bend: 1.0,
             num_voices: 1,
+            is_sustained: false,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voices: Default::default(),
@@ -58,6 +62,13 @@ impl Synth {
 
     // Finds the quietest voice not in attack
     // TODO - I wish I could do this with Option<&mut Voice>, but I'm having mut borrow issues
+    // Notes:
+    // This allows the same note to be played in multiple voices if the same note is played in succession multiple times.
+    // Some voice stealing ideas.
+    // If same note was playing, reuse the voice
+    // Try to steal released notes
+    // Steal the note w/ smallest amplitude or velocity
+    // Steal the oldest note which isn't either the highest or lowest note being played
     pub fn find_free_voice(&mut self) -> usize {
         let mut voice_idx: usize = 0;
         let mut loudness = 100.0; // Louder than any envelope
@@ -73,7 +84,7 @@ impl Synth {
     }
 
     pub fn start_voice(&mut self, voice_idx: usize, note: i32, velocity: f32) {
-        let period = self.calculate_period(note);
+        let period = self.calculate_period(voice_idx, note);
 
         let voice = &mut self.voices[voice_idx];
         voice.note = note;
@@ -99,14 +110,19 @@ impl Synth {
     pub fn note_off(&mut self, note: i32) {
         for voice in &mut self.voices {
             if voice.note == note {
-                voice.release();
-                voice.note = 0;
+                if self.is_sustained {
+                    voice.note = SUSTAIN;                    
+                } else {
+                    voice.release();
+                    voice.note = 0;
+                }
             }
         }
     }
 
-    pub fn calculate_period(&self, note: i32) -> f32 {
-        let mut period = self.tune * (-0.05776226505 * note as f32).exp();
+    pub fn calculate_period(&self, voice_idx: usize, note: i32) -> f32 {
+        // Adding the ANALOG "randomness" will slightly detune the note to make it sound more analog
+        let mut period = self.tune * (-0.05776226505 * (note as f32 + ANALOG * voice_idx as f32)).exp();
 
         // Ensure the period for the detuned oscillator is at least six samples long
         while period < 6.0 || period * self.detune < 6.0 { 
