@@ -11,6 +11,7 @@ pub struct Synth {
     pub osc_mix: f32,
     pub detune: f32,
     pub tune: f32,
+    pub pitch_bend: f32,
     noise_gen: NoiseGenerator,
     pub voice: Voice,
 }
@@ -26,6 +27,7 @@ impl Synth {
             osc_mix: 0.0,
             detune: 0.0,
             tune: 0.0,
+            pitch_bend: 1.0,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voice: Default::default(),
@@ -35,14 +37,16 @@ impl Synth {
     pub fn _reset(&mut self) {
         self.voice.reset();
         self.noise_gen.reset();
+        self.pitch_bend = 1.0;
     }
 
     pub fn note_on(&mut self, note: i32, velocity: f32) {
         self.voice.note = note;
+        self.voice.update_panning();
 
         // Map the MIDI note: [0..128] to frequency
         // 440 * 2^((note - 69) / 12)
-        let frequency = 440.0 * (((note - 69) as f32 + self.tune) / 12.0).exp2();
+        //let frequency = 440.0 * (((note - 69) as f32 + self.tune) / 12.0).exp2();
         self.voice.period = self.calculate_period(note);
 
         // TODO - Expose these as methods on the voice or maybe on the synth itself?
@@ -83,19 +87,22 @@ impl Synth {
         block_start: usize,
         block_end: usize,
     ) {
-        self.voice.oscillator_1.period = self.voice.period;
+        self.voice.oscillator_1.period = self.voice.period * self.pitch_bend;
         self.voice.oscillator_2.period = self.voice.oscillator_1.period * self.detune;
 
         for (_value_idx, sample_idx) in (block_start..block_end).enumerate() {
             let noise = self.noise_gen.next_value() * self.noise_mix;
-            let mut output_sample = 0.0;
+            let mut output_left = 0.0;
+            let mut output_right = 0.0;
 
             if self.voice.envelope.is_active() {
-                output_sample = self.voice.render(noise);
+                let output_sample = self.voice.render(noise);
+                output_left = output_sample * self.voice.pan_left;
+                output_right = output_sample * self.voice.pan_right;
             }
 
-            output_buffer[0][sample_idx] = output_sample;
-            output_buffer[1][sample_idx] = output_sample;
+            output_buffer[0][sample_idx] = output_left;
+            output_buffer[1][sample_idx] = output_right;
         }
 
         if !self.voice.envelope.is_active() {

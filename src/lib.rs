@@ -470,6 +470,17 @@ impl Plugin for RX11 {
                             } => {
                                 self.synth.note_off(note.into());
                             }
+                            NoteEvent::MidiPitchBend {
+                                timing: _,
+                                channel: _,
+                                value, // Normalized 0..1. 0.5 is no pitch bend
+                            } => { 
+                                // Express pitch bend in semitones
+                                // TODO - Need to turn 0..1 into semitones 0.89..1.12 according to the book
+                                // A value of pitchbend = 1 means the multiplier won't change
+                                // the pitch.
+                                self.synth.pitch_bend = value + 0.5;
+                            }
                             _ => {}
                         }
 
