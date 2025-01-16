@@ -1,4 +1,6 @@
 use nih_plug::prelude::*;
+use nih_plug::midi::control_change::{ALL_NOTES_OFF, ALL_SOUND_OFF};
+
 use std::sync::Arc;
 
 mod envelope;
@@ -518,6 +520,7 @@ impl Plugin for RX11 {
                                 value, // 0..1. Normally 0..127 for typical midi, but can be mapped back by multiplying by 127.
                                 // The pedals will usually be off for the first half of the range and on for the second half.
                             } => {
+                                // TODO - unsure of the const for footpedal in nih_plug
                                 if cc == 0x40 {
                                     self.synth.is_sustained = value >= 0.5;
 
@@ -528,7 +531,7 @@ impl Plugin for RX11 {
                                 }
 
                                 // All Notes Off (aka. PANIC!!!) Message
-                                if cc >= 0x78 {
+                                if cc == ALL_NOTES_OFF || cc == ALL_SOUND_OFF {
                                     for voice in &mut self.synth.voices {
                                         voice.reset();
                                     }
@@ -575,6 +578,7 @@ impl Plugin for RX11 {
                     (-inverse_sample_rate * (5.5 - 0.075 * env_release).exp()).exp();
             }
 
+
             // Voices
             match self.params.poly_mode.value() {
                 PolyMode::Mono => self.synth.num_voices = 1,
@@ -596,6 +600,11 @@ impl Plugin for RX11 {
             let mut noise_mix = self.params.noise_level.value() / 100.0;
             noise_mix *= noise_mix;
             self.synth.noise_mix = noise_mix * 0.06;
+
+            // Volume
+            //self.synth.volume_trim = 0.0008 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix) * 1.5; // TODO -This doesn't seem correct
+            self.synth.volume_trim = 1.0;
+            self.synth.output_level = self.params.output_level.value();
 
             // Do I really need to clear the buffer before rendering into it?
             output[0][block_start..block_end].fill(0.0);

@@ -16,6 +16,8 @@ pub struct Synth {
     pub detune: f32,
     pub tune: f32,
     pub pitch_bend: f32,
+    pub volume_trim: f32,
+    pub output_level: f32,
     pub num_voices: usize,
     pub is_sustained: bool,
     noise_gen: NoiseGenerator,
@@ -34,6 +36,8 @@ impl Synth {
             detune: 0.0,
             tune: 0.0,
             pitch_bend: 1.0,
+            volume_trim: 1.0,
+            output_level: 0.0,
             num_voices: 1,
             is_sustained: false,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
@@ -91,8 +95,7 @@ impl Synth {
         voice.period = period;
         voice.update_panning();
 
-        let temp_vol = 0.5;
-        voice.oscillator_1.amplitude = velocity * temp_vol;
+        voice.oscillator_1.amplitude = velocity * self.volume_trim;
         voice.oscillator_1.reset();
         
         voice.oscillator_2.amplitude = voice.oscillator_1.amplitude * self.osc_mix;
@@ -156,6 +159,9 @@ impl Synth {
                     output_right += output_sample * voice.pan_right;
                 }
             }
+
+            output_left *= self.output_level;
+            output_right *= self.output_level;
 
             output_buffer[0][sample_idx] = output_left;
             output_buffer[1][sample_idx] = output_right;
