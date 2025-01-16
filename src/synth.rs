@@ -47,7 +47,29 @@ impl Synth {
     }
 
     pub fn note_on(&mut self, note: i32, velocity: f32) {
-        self.start_voice(0, note, velocity);
+        let mut voice_idx: usize = 0;
+
+        if self.num_voices > 1 {
+            voice_idx = self.find_free_voice();
+        }
+
+        self.start_voice(voice_idx, note, velocity);
+    }
+
+    // Finds the quietest voice not in attack
+    // TODO - I wish I could do this with Option<&mut Voice>, but I'm having mut borrow issues
+    pub fn find_free_voice(&mut self) -> usize {
+        let mut voice_idx: usize = 0;
+        let mut loudness = 100.0; // Louder than any envelope
+
+        for (idx, voice) in self.voices.iter().enumerate() {
+            if voice.envelope.level < loudness && !voice.envelope.is_in_attack() {
+                loudness = voice.envelope.level;
+                voice_idx = idx;
+            }
+        }
+
+        voice_idx
     }
 
     pub fn start_voice(&mut self, voice_idx: usize, note: i32, velocity: f32) {
@@ -65,19 +87,21 @@ impl Synth {
         voice.oscillator_2.amplitude = voice.oscillator_1.amplitude * self.osc_mix;
         voice.oscillator_2.reset();
 
-        let env = &mut voice.envelope;
-        env.attack_multiplier = self.env_attack;
-        env.decay_multiplier = self.env_decay;
-        env.sustain_level = self.env_sustain;
-        env.release_multiplier = self.env_release;
-        env.attack();
+        //let env = &mut voice.envelope;
+        voice.envelope.attack_multiplier = self.env_attack;
+        voice.envelope.decay_multiplier = self.env_decay;
+        voice.envelope.sustain_level = self.env_sustain;
+        voice.envelope.release_multiplier = self.env_release;
+        voice.envelope.attack();
         
     }
 
     pub fn note_off(&mut self, note: i32) {
-        let voice = &mut self.voices[0];
-        if voice.note == note {
-            voice.release();
+        for voice in &mut self.voices {
+            if voice.note == note {
+                voice.release();
+                voice.note = 0;
+            }
         }
     }
 
@@ -97,8 +121,6 @@ impl Synth {
         block_start: usize,
         block_end: usize,
     ) {
-        //self.voice.oscillator_1.period = self.voice.period * self.pitch_bend;
-        //self.voice.oscillator_2.period = self.voice.oscillator_1.period * self.detune;
         for voice in &mut self.voices {
             if voice.envelope.is_active() {
                 voice.oscillator_1.period = voice.period * self.pitch_bend;
@@ -119,14 +141,6 @@ impl Synth {
                 }
             }
 
-            /*
-            if self.voice.envelope.is_active() {
-                let output_sample = self.voice.render(noise);
-                output_left = output_sample * self.voice.pan_left;
-                output_right = output_sample * self.voice.pan_right;
-            }
-            */
-
             output_buffer[0][sample_idx] = output_left;
             output_buffer[1][sample_idx] = output_right;
         }
@@ -136,9 +150,5 @@ impl Synth {
                 voice.envelope.reset();
             }
         }
-
-        //if !self.voice.envelope.is_active() {
-            //self.voice.envelope.reset();
-        //}
     }
 }

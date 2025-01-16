@@ -46,10 +46,8 @@ impl Envelope {
         self.level > SILENCE
     }
 
-    /* NOTE: Not used yet
     #[inline(always)]
     pub fn is_in_attack(&self) -> bool {
         self.target >= 2.0
     }
-    */
 }
