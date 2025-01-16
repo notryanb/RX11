@@ -11,6 +11,27 @@ use crate::synth::Synth;
 
 const MAX_BLOCK_SIZE: usize = 64;
 
+#[derive(Enum, PartialEq)]
+pub enum PolyMode {
+    #[id = "mono"]
+    Mono,
+
+    #[id = "poly"]
+    Poly,
+}
+
+#[derive(Enum, PartialEq)]
+pub enum GlideMode {
+    #[id = "off"]
+    Off,
+
+    #[id = "legato"]
+    Legato,
+
+    #[id = "always"]
+    Always,
+}
+
 struct RX11 {
     params: Arc<RX11Params>,
     synth: Synth,
@@ -27,13 +48,12 @@ struct RX11Params {
     #[id = "osc_fine_tune"]
     pub osc_fine_tune: FloatParam,
 
-    // TODO - Figure out what type of param is a "choice"
-    //#[id = "glide_mode"]
-    //pub glide_mode: FloatParam,
+    #[id = "glide_mode"]
+    pub glide_mode: EnumParam<GlideMode>,
 
-    // TODO - Figure out what type of param is a "choice"
-    //#[id = "poly_mode"]
-    //pub poly_mode: FloatParam,
+    #[id = "poly_mode"]
+    pub poly_mode: EnumParam<PolyMode>,
+
     #[id = "glide_rate"]
     pub glide_rate: FloatParam,
 
@@ -144,6 +164,16 @@ impl Default for RX11Params {
             .with_step_size(0.1)
             .with_unit("cent")
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
+
+            poly_mode: EnumParam::new(
+                "Poly Mode",
+                PolyMode::Mono,
+            ),
+
+            glide_mode: EnumParam::new(
+                "Glide Mode",
+                GlideMode::Off,
+            ),
 
             glide_rate: FloatParam::new(
                 "Glide Rate",
@@ -516,6 +546,12 @@ impl Plugin for RX11 {
             } else {
                 self.synth.env_release =
                     (-inverse_sample_rate * (5.5 - 0.075 * env_release).exp()).exp();
+            }
+
+            // Voices
+            match self.params.poly_mode.value() {
+                PolyMode::Mono => self.synth.num_voices = 1,
+                PolyMode::Poly => self.synth.num_voices = crate::synth::MAX_VOICES,
             }
 
             // Oscillator Tuning
