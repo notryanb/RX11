@@ -518,14 +518,25 @@ impl Plugin for RX11 {
                                 value, // 0..1. Normally 0..127 for typical midi, but can be mapped back by multiplying by 127.
                                 // The pedals will usually be off for the first half of the range and on for the second half.
                             } => {
-                                if cc == 0x40 && value >= 0.5 {
-                                    self.synth.is_sustained = true;
+                                if cc == 0x40 {
+                                    self.synth.is_sustained = value >= 0.5;
 
                                     if !self.synth.is_sustained {
                                         // release the sustained voices
                                         self.synth.note_off(crate::synth::SUSTAIN);
                                     }
                                 }
+
+                                // All Notes Off (aka. PANIC!!!) Message
+                                if cc >= 0x78 {
+                                    for voice in &mut self.synth.voices {
+                                        voice.reset();
+                                    }
+
+                                    self.synth.is_sustained = false;
+                                }
+
+                                
                             }
                             _ => {}
                         }
