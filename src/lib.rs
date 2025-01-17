@@ -1,5 +1,5 @@
-use nih_plug::prelude::*;
 use nih_plug::midi::control_change::{ALL_NOTES_OFF, ALL_SOUND_OFF};
+use nih_plug::prelude::*;
 
 use std::sync::Arc;
 
@@ -167,15 +167,9 @@ impl Default for RX11Params {
             .with_unit("cent")
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
 
-            poly_mode: EnumParam::new(
-                "Poly Mode",
-                PolyMode::Mono,
-            ),
+            poly_mode: EnumParam::new("Poly Mode", PolyMode::Mono),
 
-            glide_mode: EnumParam::new(
-                "Glide Mode",
-                GlideMode::Off,
-            ),
+            glide_mode: EnumParam::new("Glide Mode", GlideMode::Off),
 
             glide_rate: FloatParam::new(
                 "Glide Rate",
@@ -506,7 +500,7 @@ impl Plugin for RX11 {
                                 timing: _,
                                 channel: _,
                                 value, // Normalized 0..1. 0.5 is no pitch bend
-                            } => { 
+                            } => {
                                 // Express pitch bend in semitones
                                 // TODO - Need to turn 0..1 into semitones 0.89..1.12 according to the book
                                 // A value of pitchbend = 1 means the multiplier won't change
@@ -518,7 +512,7 @@ impl Plugin for RX11 {
                                 channel: _,
                                 cc,
                                 value, // 0..1. Normally 0..127 for typical midi, but can be mapped back by multiplying by 127.
-                                // The pedals will usually be off for the first half of the range and on for the second half.
+                                       // The pedals will usually be off for the first half of the range and on for the second half.
                             } => {
                                 // TODO - unsure of the const for footpedal in nih_plug
                                 if cc == 0x40 {
@@ -538,8 +532,6 @@ impl Plugin for RX11 {
 
                                     self.synth.is_sustained = false;
                                 }
-
-                                
                             }
                             _ => {}
                         }
@@ -578,7 +570,6 @@ impl Plugin for RX11 {
                     (-inverse_sample_rate * (5.5 - 0.075 * env_release).exp()).exp();
             }
 
-
             // Voices
             match self.params.poly_mode.value() {
                 PolyMode::Mono => self.synth.num_voices = 1,
@@ -590,7 +581,7 @@ impl Plugin for RX11 {
             let tuning = self.params.tuning.value();
             let tune_in_semi = -36.3763 - 12.0 * octave - tuning / 100.0;
             self.synth.tune = sample_rate * (0.05776226505 * tune_in_semi).exp();
-            
+
             let semi = self.params.osc_tune.value();
             let cent = self.params.osc_fine_tune.value();
             self.synth.detune = 1.059463094359_f32.powf(-semi - 0.01 * cent); // Total detuning in semitones
@@ -604,13 +595,14 @@ impl Plugin for RX11 {
             // Volume
             //self.synth.volume_trim = 0.0008 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix) * 1.5; // TODO -This doesn't seem correct
             self.synth.volume_trim = 1.0;
-            self.synth.output_level = self.params.output_level.value();
+            //self.synth.output_level = self.params.output_level.smoothed.next();
 
             // Do I really need to clear the buffer before rendering into it?
             output[0][block_start..block_end].fill(0.0);
             output[1][block_start..block_end].fill(0.0);
 
-            self.synth.render(output, block_start, block_end);
+            self.synth
+                .render(output, block_start, block_end, &self.params);
 
             block_start = block_end;
             block_end = (block_start + MAX_BLOCK_SIZE).min(num_samples);

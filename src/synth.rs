@@ -1,5 +1,6 @@
 use crate::noise_generator::NoiseGenerator;
 use crate::voice::Voice;
+use crate::RX11Params;
 
 pub const MAX_VOICES: usize = 8;
 pub const ANALOG: f32 = 0.002;
@@ -97,7 +98,7 @@ impl Synth {
 
         voice.oscillator_1.amplitude = velocity * self.volume_trim;
         voice.oscillator_1.reset();
-        
+
         voice.oscillator_2.amplitude = voice.oscillator_1.amplitude * self.osc_mix;
         voice.oscillator_2.reset();
 
@@ -107,14 +108,13 @@ impl Synth {
         voice.envelope.sustain_level = self.env_sustain;
         voice.envelope.release_multiplier = self.env_release;
         voice.envelope.attack();
-        
     }
 
     pub fn note_off(&mut self, note: i32) {
         for voice in &mut self.voices {
             if voice.note == note {
                 if self.is_sustained {
-                    voice.note = SUSTAIN;                    
+                    voice.note = SUSTAIN;
                 } else {
                     voice.release();
                     voice.note = 0;
@@ -125,11 +125,12 @@ impl Synth {
 
     pub fn calculate_period(&self, voice_idx: usize, note: i32) -> f32 {
         // Adding the ANALOG "randomness" will slightly detune the note to make it sound more analog
-        let mut period = self.tune * (-0.05776226505 * (note as f32 + ANALOG * voice_idx as f32)).exp();
+        let mut period =
+            self.tune * (-0.05776226505 * (note as f32 + ANALOG * voice_idx as f32)).exp();
 
         // Ensure the period for the detuned oscillator is at least six samples long
-        while period < 6.0 || period * self.detune < 6.0 { 
-            period += period; 
+        while period < 6.0 || period * self.detune < 6.0 {
+            period += period;
         }
         period
     }
@@ -139,6 +140,7 @@ impl Synth {
         output_buffer: &mut [&mut [f32]],
         block_start: usize,
         block_end: usize,
+        params: &RX11Params,
     ) {
         for voice in &mut self.voices {
             if voice.envelope.is_active() {
@@ -160,8 +162,9 @@ impl Synth {
                 }
             }
 
-            output_left *= self.output_level;
-            output_right *= self.output_level;
+            let output_level = params.output_level.smoothed.next();
+            output_left *= output_level;
+            output_right *= output_level;
 
             output_buffer[0][sample_idx] = output_left;
             output_buffer[1][sample_idx] = output_right;
