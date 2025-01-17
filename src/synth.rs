@@ -58,11 +58,46 @@ impl Synth {
     pub fn note_on(&mut self, note: i32, velocity: f32) {
         let mut voice_idx: usize = 0;
 
-        if self.num_voices > 1 {
+        if self.num_voices == 1 {
+            // MONOPHONIC
+            if self.voices[0].note > 0 {
+                // Legato style
+                self.shift_queued_notes();
+                self.restart_mono_voice(note, velocity);
+                return;
+            }
+        } else {
+            // POLYPHONIC
             voice_idx = self.find_free_voice();
         }
 
         self.start_voice(voice_idx, note, velocity);
+    }
+
+    // FIXME: Add test cases
+    pub fn shift_queued_notes(&mut self) {
+        for tmp in (0..MAX_VOICES).rev() {
+            self.voices[tmp].note = self.voices[tmp - 1].note;
+        }
+    }
+
+    // FIXME: Add test cases
+    pub fn next_queued_note(&mut self) -> i32 {
+        let mut held: usize = 0;
+
+        for i in (0..MAX_VOICES).rev() {
+            if self.voices[i].note > 0 {
+                held = i;
+            }
+        }
+
+        if held > 0 {
+            let note = self.voices[held].note;
+            self.voices[held].note = 0;
+            return note;
+        }
+
+        0
     }
 
     // Finds the quietest voice not in attack
@@ -111,6 +146,13 @@ impl Synth {
     }
 
     pub fn note_off(&mut self, note: i32) {
+        if self.num_voices == 1 && self.voices[0].note == note {
+            let queued_note = self.next_queued_note();
+
+            if queued_note > 0 {
+                self.restart_mono_voice(queued_note, -1.0);
+            }
+        }
         for voice in &mut self.voices {
             if voice.note == note {
                 if self.is_sustained {
@@ -133,6 +175,16 @@ impl Synth {
             period += period;
         }
         period
+    }
+
+    pub fn restart_mono_voice(&mut self, note: i32, velocity: f32) {
+        let period = self.calculate_period(0, note);
+
+        let voice = &mut self.voices[0];
+        voice.period = period;
+        voice.envelope.level += crate::envelope::SILENCE + crate::envelope::SILENCE;
+        voice.note = note;
+        voice.update_panning();
     }
 
     pub fn render(

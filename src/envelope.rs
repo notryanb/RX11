@@ -1,4 +1,4 @@
-const SILENCE: f32 = 0.0001; // -80db = 20 * log(0.0001)
+pub const SILENCE: f32 = 0.0001; // -80db = 20 * log(0.0001)
 
 #[derive(Default)]
 pub struct Envelope {
