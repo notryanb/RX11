@@ -1,4 +1,6 @@
-use nih_plug::midi::control_change::{ALL_NOTES_OFF, ALL_SOUND_OFF};
+use nih_plug::midi::control_change::{
+    ALL_NOTES_OFF, ALL_SOUND_OFF, MAIN_VOLUME_MSB, MODULATION_MSB,
+};
 use nih_plug::prelude::*;
 
 use std::sync::Arc;
@@ -6,6 +8,7 @@ use std::sync::Arc;
 mod envelope;
 mod noise_generator;
 mod oscillator;
+mod state_variable_filter;
 mod synth;
 mod voice;
 
@@ -464,6 +467,14 @@ impl Plugin for RX11 {
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         let sample_rate = context.transport().sample_rate;
+
+        // TODO - discover if there is a way to get the sample_rate in RX11::default
+        // voices also rely on default impl, so I'd need to pass it down.
+        self.synth.sample_rate = sample_rate;
+        for voice in &mut self.synth.voices {
+            voice.filter.sample_rate = sample_rate;
+        }
+
         let inverse_sample_rate = 1.0 / sample_rate;
         let inverse_update_rate = inverse_sample_rate * crate::synth::LFO_MAX;
 
@@ -516,6 +527,16 @@ impl Plugin for RX11 {
                                 value, // 0..1. Normally 0..127 for typical midi, but can be mapped back by multiplying by 127.
                                        // The pedals will usually be off for the first half of the range and on for the second half.
                             } => {
+                                if cc == MODULATION_MSB {
+                                    self.synth.mod_wheel = 0.000005 * value;
+                                }
+
+                                if cc == MAIN_VOLUME_MSB {
+                                    // TODO - Figure out how to notify the UI...
+                                    // ie. write to the params Arc.
+                                    let _volume_ctrl = value;
+                                }
+
                                 // TODO - unsure of the const for footpedal in nih_plug
                                 if cc == 0x40 {
                                     self.synth.is_sustained = value >= 0.5;
@@ -589,6 +610,7 @@ impl Plugin for RX11 {
             self.synth.detune = 1.059463094359_f32.powf(-semi - 0.01 * cent); // Total detuning in semitones
             self.synth.osc_mix = self.params.osc_mix.value() / 100.0;
 
+            // Filter
             let filter_velocity = self.params.filter_velocity.value();
             if filter_velocity < -90.0 {
                 self.synth.velocity_sensitivity = 0.0;
@@ -598,9 +620,15 @@ impl Plugin for RX11 {
                 self.synth.ignore_velocity = false;
             }
 
-            // LFO & Vibrato
+            // Convert range from -1.5..6.5
+            self.synth.filter_key_tracking = 0.08 * self.params.filter_freq.value() - 1.5;
+
+            let filter_resonance = self.params.filter_reso.value() / 100.0;
+            self.synth.filter_resonance = (3.0 * filter_resonance).exp();
+
+            // LFO & Vibrato: Phase increment = 2PI * freq / sample rate
             let lfo_rate = (7.0 * self.params.lfo_rate.value() - 4.0).exp();
-            self.synth.lfo_increment = lfo_rate * inverse_update_rate * std::f32::consts::TAU;
+            self.synth.lfo_phase_increment = lfo_rate * inverse_update_rate * std::f32::consts::TAU;
 
             let vibrato = self.params.vibrato.value() / 200.0;
             self.synth.vibrato = 0.2 * vibrato * vibrato;
@@ -610,6 +638,15 @@ impl Plugin for RX11 {
                 self.synth.vibrato = 0.0;
             }
 
+            self.synth.glide_mode = self.params.glide_mode.value();
+            let glide_rate = self.params.glide_rate.value();
+            if glide_rate < 2.0 {
+                self.synth.glide_rate = 1.0; // No glide
+            } else {
+                self.synth.glide_rate =
+                    1.0 - (-inverse_update_rate * (6.0 - 0.07 * glide_rate).exp()).exp();
+            }
+
             // Noise
             let mut noise_mix = self.params.noise_level.value() / 100.0;
             noise_mix *= noise_mix;
@@ -617,7 +654,7 @@ impl Plugin for RX11 {
 
             // Volume
             // self.synth.volume_trim =
-            // 0.0008 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix) * 1.5;
+            // 0.0008 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix) * (1.5 - 0.5 * self.synth.filter_resonance);
 
             self.synth.volume_trim = 1.0;
             //self.synth.output_level = self.params.output_level.smoothed.next();

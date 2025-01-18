@@ -19,13 +19,19 @@ pub struct Synth {
     pub tune: f32,
     pub pitch_bend: f32,
     pub volume_trim: f32,
-    pub output_level: f32,
     pub velocity_sensitivity: f32,
     pub vibrato: f32,
     pub pwm_depth: f32,
-    pub lfo_increment: f32,
+    pub lfo_phase_increment: f32,
     pub lfo: f32,
     pub lfo_step: i32,
+    pub mod_wheel: f32,
+    pub glide_mode: crate::GlideMode,
+    pub glide_rate: f32,
+    pub glide_bend: f32,
+    pub last_note: i32,
+    pub filter_key_tracking: f32,
+    pub filter_resonance: f32,
     pub num_voices: usize,
     pub is_sustained: bool,
     pub ignore_velocity: bool,
@@ -36,6 +42,7 @@ pub struct Synth {
 impl Synth {
     pub fn new() -> Self {
         Self {
+            sample_rate: 44100.0, // This is called from the Plugin Default... so have to figure out how to pass in the context transport?
             noise_mix: 0.0,
             env_attack: 0.0,
             env_decay: 0.0,
@@ -46,17 +53,22 @@ impl Synth {
             tune: 0.0,
             pitch_bend: 1.0,
             volume_trim: 1.0,
-            output_level: 0.0,
             vibrato: 0.0,
             pwm_depth: 0.0,
+            last_note: 0,
             lfo: 0.0,
             lfo_step: 0,
-            lfo_increment: 0.0,
+            lfo_phase_increment: 0.0,
             velocity_sensitivity: 0.0,
+            mod_wheel: 0.0,
+            glide_mode: crate::GlideMode::Off,
+            glide_rate: 1.0,
+            glide_bend: 0.0,
+            filter_key_tracking: 0.0,
+            filter_resonance: 0.0,
             num_voices: 1,
             is_sustained: false,
             ignore_velocity: false,
-            sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voices: Default::default(),
         }
@@ -69,8 +81,10 @@ impl Synth {
 
         self.noise_gen.reset();
         self.pitch_bend = 1.0;
+        self.mod_wheel = 0.0;
         self.lfo = 0.0;
         self.lfo_step = 0;
+        self.last_note = 0;
     }
 
     pub fn note_on(&mut self, note: i32, velocity: f32) {
@@ -126,6 +140,9 @@ impl Synth {
 
     // Finds the quietest voice not in attack
     // TODO - I wish I could do this with Option<&mut Voice>, but I'm having mut borrow issues
+    // From Rust playground, I think this can be achieved if the method is not implemented on the synth. Maybe a Voices
+    // type is worth it?
+    //
     // Notes:
     // This allows the same note to be played in multiple voices if the same note is played in succession multiple times.
     // Some voice stealing ideas.
@@ -147,12 +164,39 @@ impl Synth {
         voice_idx
     }
 
+    // TODO - I'm subtracting 64 from velocity, which I believe is already 0..1. Discover how
+    // this parameter might have to be changed
     pub fn start_voice(&mut self, voice_idx: usize, note: i32, velocity: f32) {
         let period = self.calculate_period(voice_idx, note);
+        let is_playing_legato_style = self.is_playing_legato_style();
 
         let voice = &mut self.voices[voice_idx];
+        voice.target_period = period;
+
+        // dividing by PI was part of the original JX11 and makes the cutoff about 3x lower than the played note
+        voice.cutoff_freq = self.sample_rate / (period * std::f32::consts::PI);
+        if velocity > 0.0 {
+            voice.cutoff_freq *= (self.velocity_sensitivity * (velocity - 64.0)).exp();
+        }
+
+        // Glide
+        let mut note_distance = 0;
+        if self.last_note > 0 {
+            if self.glide_mode == crate::GlideMode::Legato
+                || (self.glide_mode == crate::GlideMode::Always && is_playing_legato_style)
+            {
+                note_distance = note - self.last_note;
+            }
+        }
+
+        voice.period = period * 1.059463094359_f32.powf(note_distance as f32 - self.glide_bend);
+
+        if voice.period < 6.0 {
+            voice.period = 6.0;
+        }
+
+        self.last_note = note;
         voice.note = note;
-        voice.period = period;
         voice.update_panning();
 
         // Adjust velocity to be non-linear - somewhat parabolic
@@ -213,7 +257,12 @@ impl Synth {
         let period = self.calculate_period(0, note);
 
         let voice = &mut self.voices[0];
-        voice.period = period;
+        voice.target_period = period;
+
+        if self.glide_mode == crate::GlideMode::Off {
+            voice.period = period;
+        }
+
         voice.envelope.level += crate::envelope::SILENCE + crate::envelope::SILENCE;
         voice.note = note;
         voice.update_panning();
@@ -224,24 +273,48 @@ impl Synth {
         if self.lfo_step <= 0 {
             self.lfo_step = LFO_MAX as i32;
 
-            self.lfo += self.lfo_increment;
+            self.lfo += self.lfo_phase_increment;
 
             if self.lfo > std::f32::consts::PI {
                 self.lfo -= std::f32::consts::TAU;
             }
 
             let sine = self.lfo.sin();
-            let vibrato_mod = 1.0 + sine * self.vibrato;
-            let pwm = 1.0 + sine * self.pwm_depth;
+            let vibrato_mod = 1.0 + sine * (self.mod_wheel + self.vibrato);
+            let pwm = 1.0 + sine * (self.mod_wheel + self.pwm_depth);
+            let filter_mod = self.filter_key_tracking;
 
             for voice in &mut self.voices {
                 if voice.envelope.is_active() {
                     voice.oscillator_1.modulation = vibrato_mod;
                     voice.oscillator_2.modulation = pwm;
+                    voice.filter_mod = filter_mod;
+                    voice.update_lfo();
+
+                    //self.update_period(voice); // TODO: This causes mut borrow issues
+                    voice.oscillator_1.period = voice.period * self.pitch_bend;
+                    voice.oscillator_2.period = voice.oscillator_1.period * self.detune;
                 }
             }
         }
     }
+
+    pub fn is_playing_legato_style(&self) -> bool {
+        let mut held = 0;
+
+        for i in 0..MAX_VOICES {
+            if self.voices[i].note > 0 {
+                held += 1;
+            }
+        }
+
+        return held > 0;
+    }
+
+    // pub fn update_period(&mut self, voice: &mut Voice) {
+    //     voice.oscillator_1.period = voice.period * self.pitch_bend;
+    //     voice.oscillator_2.period = voice.oscillator_1.period * self.detune;
+    // }
 
     pub fn render(
         &mut self,
@@ -254,6 +327,8 @@ impl Synth {
             if voice.envelope.is_active() {
                 voice.oscillator_1.period = voice.period * self.pitch_bend;
                 voice.oscillator_2.period = voice.oscillator_1.period * self.detune;
+                voice.glide_rate = self.glide_rate;
+                voice.filter_resonance = self.filter_resonance;
             }
         }
 
@@ -272,6 +347,8 @@ impl Synth {
                 }
             }
 
+            // TODO: See if there is ever a case where the buffer is "MONO" where
+            // there is no right channel. The sample needs to be (output_left + output_right) * 0.5
             let output_level = params.output_level.smoothed.next();
             output_left *= output_level;
             output_right *= output_level;
@@ -283,6 +360,7 @@ impl Synth {
         for voice in &mut self.voices {
             if !voice.envelope.is_active() {
                 voice.envelope.reset();
+                voice.filter.reset();
             }
         }
     }
