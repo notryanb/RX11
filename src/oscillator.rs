@@ -31,7 +31,7 @@ impl Default for Oscillator {
             phase: 0.0,
             phase_max: 0.0,
             dc_offset: 0.0,
-            modulation: 0.0,
+            modulation: 1.0,
             sin0: 0.0,
             sin1: 0.0,
             dsin: 0.0,
