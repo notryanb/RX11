@@ -463,9 +463,11 @@ impl Plugin for RX11 {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        let num_samples = buffer.samples();
         let sample_rate = context.transport().sample_rate;
         let inverse_sample_rate = 1.0 / sample_rate;
+        let inverse_update_rate = inverse_sample_rate * crate::synth::LFO_MAX;
+
+        let num_samples = buffer.samples();
         let output = buffer.as_slice();
 
         let mut block_start: usize = 0;
@@ -587,13 +589,36 @@ impl Plugin for RX11 {
             self.synth.detune = 1.059463094359_f32.powf(-semi - 0.01 * cent); // Total detuning in semitones
             self.synth.osc_mix = self.params.osc_mix.value() / 100.0;
 
+            let filter_velocity = self.params.filter_velocity.value();
+            if filter_velocity < -90.0 {
+                self.synth.velocity_sensitivity = 0.0;
+                self.synth.ignore_velocity = true;
+            } else {
+                self.synth.velocity_sensitivity = 0.0005 * filter_velocity;
+                self.synth.ignore_velocity = false;
+            }
+
+            // LFO & Vibrato
+            let lfo_rate = (7.0 * self.params.lfo_rate.value() - 4.0).exp();
+            self.synth.lfo_increment = lfo_rate * inverse_update_rate * std::f32::consts::TAU;
+
+            let vibrato = self.params.vibrato.value() / 200.0;
+            self.synth.vibrato = 0.2 * vibrato * vibrato;
+
+            self.synth.pwm_depth = self.synth.vibrato;
+            if self.synth.vibrato < 0.0 {
+                self.synth.vibrato = 0.0;
+            }
+
             // Noise
             let mut noise_mix = self.params.noise_level.value() / 100.0;
             noise_mix *= noise_mix;
             self.synth.noise_mix = noise_mix * 0.06;
 
             // Volume
-            //self.synth.volume_trim = 0.0008 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix) * 1.5; // TODO -This doesn't seem correct
+            // self.synth.volume_trim =
+            // 0.0008 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix) * 1.5;
+
             self.synth.volume_trim = 1.0;
             //self.synth.output_level = self.params.output_level.smoothed.next();
 

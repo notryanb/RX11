@@ -1,6 +1,7 @@
 const PI_OVER_FOUR: f32 = std::f32::consts::PI / 4.0; //0.7853981633974483;
 
 pub struct Oscillator {
+    // Loudness of the sound
     pub amplitude: f32,
 
     pub period: f32,
@@ -12,10 +13,10 @@ pub struct Oscillator {
     /// It is a "modulo counter" aka "phasor"
     pub phase: f32,
 
+    pub modulation: f32,
+
     phase_max: f32,
-
     dc_offset: f32,
-
     sin0: f32,
     sin1: f32,
     dsin: f32,
@@ -30,6 +31,7 @@ impl Default for Oscillator {
             phase: 0.0,
             phase_max: 0.0,
             dc_offset: 0.0,
+            modulation: 0.0,
             sin0: 0.0,
             sin1: 0.0,
             dsin: 0.0,
@@ -47,12 +49,31 @@ impl Oscillator {
         self.dsin = 0.0;
     }
 
+    pub fn square_wave(&mut self, other: &Oscillator, new_period: f32) {
+        self.reset();
+
+        if other.increment > 0.0 {
+            self.phase = other.phase_max + other.phase_max - other.phase;
+            self.increment = -other.increment;
+        } else if other.increment < 0.0 {
+            self.phase = other.phase;
+            self.increment = other.increment;
+        } else {
+            self.phase = -std::f32::consts::PI;
+            self.increment = std::f32::consts::PI;
+        }
+
+        self.phase += std::f32::consts::PI * new_period / 2.0;
+        self.phase_max = self.phase;
+    }
+
     pub fn next_sample(&mut self) -> f32 {
         let output;
         self.phase += self.increment;
 
         if self.phase <= PI_OVER_FOUR {
-            let half_period = self.period / 2.0;
+            let half_period = (self.period / 2.0) * self.modulation;
+
             self.phase_max = (0.5 + half_period).floor() - 0.5;
             self.dc_offset = 0.5 * self.amplitude / self.phase_max;
             self.phase_max *= std::f32::consts::PI;

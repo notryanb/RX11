@@ -5,6 +5,7 @@ use crate::RX11Params;
 pub const MAX_VOICES: usize = 8;
 pub const ANALOG: f32 = 0.002;
 pub const SUSTAIN: i32 = -1;
+pub const LFO_MAX: f32 = 32.0;
 
 pub struct Synth {
     pub noise_mix: f32,
@@ -19,8 +20,15 @@ pub struct Synth {
     pub pitch_bend: f32,
     pub volume_trim: f32,
     pub output_level: f32,
+    pub velocity_sensitivity: f32,
+    pub vibrato: f32,
+    pub pwm_depth: f32,
+    pub lfo_increment: f32,
+    pub lfo: f32,
+    pub lfo_step: i32,
     pub num_voices: usize,
     pub is_sustained: bool,
+    pub ignore_velocity: bool,
     noise_gen: NoiseGenerator,
     pub voices: [Voice; MAX_VOICES],
 }
@@ -39,8 +47,15 @@ impl Synth {
             pitch_bend: 1.0,
             volume_trim: 1.0,
             output_level: 0.0,
+            vibrato: 0.0,
+            pwm_depth: 0.0,
+            lfo: 0.0,
+            lfo_step: 0,
+            lfo_increment: 0.0,
+            velocity_sensitivity: 0.0,
             num_voices: 1,
             is_sustained: false,
+            ignore_velocity: false,
             sample_rate: 44100.0, // TODO - Set Sample Rate from DAW
             noise_gen: NoiseGenerator::new(),
             voices: Default::default(),
@@ -51,11 +66,20 @@ impl Synth {
         for voice in &mut self.voices {
             voice.reset();
         }
+
         self.noise_gen.reset();
         self.pitch_bend = 1.0;
+        self.lfo = 0.0;
+        self.lfo_step = 0;
     }
 
     pub fn note_on(&mut self, note: i32, velocity: f32) {
+        let mut velocity = velocity; // Shadow the variable so it can be mutateble without changing the signature
+
+        if self.ignore_velocity {
+            velocity = 80.0;
+        }
+
         let mut voice_idx: usize = 0;
 
         if self.num_voices == 1 {
@@ -131,11 +155,19 @@ impl Synth {
         voice.period = period;
         voice.update_panning();
 
+        // Adjust velocity to be non-linear - somewhat parabolic
+        let velocity = 0.004 * (velocity + 64.0) * (velocity + 64.0) - 8.0;
         voice.oscillator_1.amplitude = velocity * self.volume_trim;
         voice.oscillator_1.reset();
 
         voice.oscillator_2.amplitude = voice.oscillator_1.amplitude * self.osc_mix;
         voice.oscillator_2.reset();
+
+        if self.vibrato == 0.0 && self.pwm_depth > 0.0 {
+            voice
+                .oscillator_2
+                .square_wave(&voice.oscillator_1, voice.period);
+        }
 
         //let env = &mut voice.envelope;
         voice.envelope.attack_multiplier = self.env_attack;
@@ -187,6 +219,30 @@ impl Synth {
         voice.update_panning();
     }
 
+    pub fn update_lfo(&mut self) {
+        self.lfo_step -= 1;
+        if self.lfo_step <= 0 {
+            self.lfo_step = LFO_MAX as i32;
+
+            self.lfo += self.lfo_increment;
+
+            if self.lfo > std::f32::consts::PI {
+                self.lfo -= std::f32::consts::TAU;
+            }
+
+            let sine = self.lfo.sin();
+            let vibrato_mod = 1.0 + sine * self.vibrato;
+            let pwm = 1.0 + sine * self.pwm_depth;
+
+            for voice in &mut self.voices {
+                if voice.envelope.is_active() {
+                    voice.oscillator_1.modulation = vibrato_mod;
+                    voice.oscillator_2.modulation = pwm;
+                }
+            }
+        }
+    }
+
     pub fn render(
         &mut self,
         output_buffer: &mut [&mut [f32]],
@@ -202,6 +258,8 @@ impl Synth {
         }
 
         for (_value_idx, sample_idx) in (block_start..block_end).enumerate() {
+            self.update_lfo();
+
             let noise = self.noise_gen.next_value() * self.noise_mix;
             let mut output_left = 0.0;
             let mut output_right = 0.0;
