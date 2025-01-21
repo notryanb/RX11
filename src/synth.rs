@@ -32,6 +32,15 @@ pub struct Synth {
     pub last_note: i32,
     pub filter_key_tracking: f32,
     pub filter_resonance: f32,
+    pub filter_lfo_depth: f32,
+    pub filter_ctrl: f32,
+    pub filter_smoothing: f32,
+    pub filter_attack: f32,
+    pub filter_decay: f32,
+    pub filter_sustain: f32,
+    pub filter_release: f32,
+    pub filter_env_depth: f32,
+    pub pressure: f32,
     pub num_voices: usize,
     pub is_sustained: bool,
     pub ignore_velocity: bool,
@@ -66,6 +75,15 @@ impl Synth {
             glide_bend: 0.0,
             filter_key_tracking: 0.0,
             filter_resonance: 0.0,
+            filter_lfo_depth: 0.0,
+            filter_ctrl: 0.0,
+            filter_smoothing: 0.0,
+            filter_attack: 0.0,
+            filter_decay: 0.0,
+            filter_sustain: 0.0,
+            filter_release: 0.0,
+            filter_env_depth: 0.0,
+            pressure: 0.0,
             num_voices: 1,
             is_sustained: false,
             ignore_velocity: false,
@@ -85,6 +103,9 @@ impl Synth {
         self.lfo = 0.0;
         self.lfo_step = 0;
         self.last_note = 0;
+        self.filter_ctrl = 0.0;
+        self.pressure = 0.0;
+        self.filter_smoothing = 0.0;
     }
 
     pub fn note_on(&mut self, note: i32, velocity: f32) {
@@ -213,12 +234,17 @@ impl Synth {
                 .square_wave(&voice.oscillator_1, voice.period);
         }
 
-        //let env = &mut voice.envelope;
         voice.envelope.attack_multiplier = self.env_attack;
         voice.envelope.decay_multiplier = self.env_decay;
         voice.envelope.sustain_level = self.env_sustain;
         voice.envelope.release_multiplier = self.env_release;
         voice.envelope.attack();
+
+        voice.filter_envelope.attack_multiplier = self.filter_attack;
+        voice.filter_envelope.decay_multiplier = self.filter_decay;
+        voice.filter_envelope.sustain_level = self.filter_sustain;
+        voice.filter_envelope.release_multiplier = self.filter_release;
+        voice.filter_envelope.attack();
     }
 
     pub fn note_off(&mut self, note: i32) {
@@ -282,13 +308,14 @@ impl Synth {
             let sine = self.lfo.sin();
             let vibrato_mod = 1.0 + sine * (self.mod_wheel + self.vibrato);
             let pwm = 1.0 + sine * (self.mod_wheel + self.pwm_depth);
-            let filter_mod = self.filter_key_tracking;
+            let filter_mod = self.filter_key_tracking + self.filter_ctrl + (self.filter_lfo_depth + self.pressure) * sine;
+            self.filter_smoothing += 0.005 * (filter_mod - self.filter_smoothing);
 
             for voice in &mut self.voices {
                 if voice.envelope.is_active() {
                     voice.oscillator_1.modulation = vibrato_mod;
                     voice.oscillator_2.modulation = pwm;
-                    voice.filter_mod = filter_mod;
+                    voice.filter_mod = self.filter_smoothing;
                     voice.update_lfo();
 
                     //self.update_period(voice); // TODO: This causes mut borrow issues
@@ -329,6 +356,8 @@ impl Synth {
                 voice.oscillator_2.period = voice.oscillator_1.period * self.detune;
                 voice.glide_rate = self.glide_rate;
                 voice.filter_resonance = self.filter_resonance;
+                voice.pitch_bend = self.pitch_bend;
+                voice.filter_env_depth = self.filter_env_depth;
             }
         }
 

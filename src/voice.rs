@@ -18,9 +18,12 @@ pub struct Voice {
     pub cutoff_freq: f32,
     pub filter_resonance: f32,
     pub filter_mod: f32,
+    pub filter_env_depth: f32,
+    pub pitch_bend: f32,
     pub oscillator_1: Oscillator,
     pub oscillator_2: Oscillator,
     pub envelope: Envelope,
+    pub filter_envelope: Envelope,
     pub filter: StateVariableFilter,
 }
 
@@ -34,6 +37,7 @@ impl Voice {
         self.oscillator_1.reset();
         self.oscillator_2.reset();
         self.envelope.reset();
+        self.filter_envelope.reset();
         self.filter.reset();
     }
 
@@ -54,16 +58,20 @@ impl Voice {
     }
 
     pub fn update_lfo(&mut self) {
-        let mut modulated_cutoff = self.cutoff_freq * self.filter_mod.exp();
+        self.period += self.glide_rate * (self.target_period - self.period);
+
+        let filter_env = self.filter_envelope.next_value();
+
+        let mut modulated_cutoff = self.cutoff_freq * (self.filter_mod + self.filter_env_depth * filter_env).exp() / self.pitch_bend;
         modulated_cutoff = modulated_cutoff.clamp(30.0, 20_000.0);
 
         self.filter
             .update_coefficients(modulated_cutoff, self.filter_resonance);
-        self.period += self.glide_rate * (self.target_period - self.period);
     }
 
     pub fn release(&mut self) {
         self.envelope.release();
+        self.filter_envelope.release();
     }
 
     pub fn update_panning(&mut self) {

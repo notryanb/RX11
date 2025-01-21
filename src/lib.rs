@@ -520,6 +520,13 @@ impl Plugin for RX11 {
                                 // the pitch.
                                 self.synth.pitch_bend = value + 0.5;
                             }
+                            NoteEvent::MidiChannelPressure {
+                                timing: _,
+                                channel: _,
+                                pressure,
+                            } => {
+                                self.synth.pressure = 0.0001 * pressure * pressure;
+                            }
                             NoteEvent::MidiCC {
                                 timing: _,
                                 channel: _,
@@ -529,6 +536,14 @@ impl Plugin for RX11 {
                             } => {
                                 if cc == MODULATION_MSB {
                                     self.synth.mod_wheel = 0.000005 * value;
+                                }
+
+                                if cc == 0x4A { // Filter inc
+                                    self.synth.filter_ctrl = 0.02 * value;
+                                }
+
+                                if cc == 0x4B { // Filter dec
+                                    self.synth.filter_ctrl = -0.03 * value;
                                 }
 
                                 if cc == MAIN_VOLUME_MSB {
@@ -620,12 +635,22 @@ impl Plugin for RX11 {
                 self.synth.ignore_velocity = false;
             }
 
+            let filter_lfo = self.params.filter_lfo.value();
+            self.synth.filter_lfo_depth = 2.5 * filter_lfo * filter_lfo;
+
             // Convert range from -1.5..6.5
             self.synth.filter_key_tracking = 0.08 * self.params.filter_freq.value() - 1.5;
 
             let filter_resonance = self.params.filter_reso.value() / 100.0;
             self.synth.filter_resonance = (3.0 * filter_resonance).exp();
 
+            self.synth.filter_attack = (-inverse_update_rate * (5.5 - 0.075 * self.params.filter_attack.value()).exp()).exp();
+            self.synth.filter_decay = (-inverse_update_rate * (5.5 - 0.075 * self.params.filter_decay.value()).exp()).exp();
+            self.synth.filter_release = (-inverse_update_rate * (5.5 - 0.075 * self.params.filter_release.value()).exp()).exp();
+            let filter_sustain = self.params.filter_sustain.value() / 100.0;
+            self.synth.filter_sustain = filter_sustain * filter_sustain;
+            self.synth.filter_env_depth = 0.06 * self.params.filter_env.value();
+            
             // LFO & Vibrato: Phase increment = 2PI * freq / sample rate
             let lfo_rate = (7.0 * self.params.lfo_rate.value() - 4.0).exp();
             self.synth.lfo_phase_increment = lfo_rate * inverse_update_rate * std::f32::consts::TAU;
