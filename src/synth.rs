@@ -99,6 +99,7 @@ impl Synth {
 
         self.noise_gen.reset();
         self.pitch_bend = 1.0;
+        self.is_sustained = false;
         self.mod_wheel = 0.0;
         self.lfo = 0.0;
         self.lfo_step = 0;
@@ -106,6 +107,7 @@ impl Synth {
         self.filter_ctrl = 0.0;
         self.pressure = 0.0;
         self.filter_smoothing = 0.0;
+        // TODO - reset output_level smoother
     }
 
     pub fn note_on(&mut self, note: i32, velocity: f32) {
@@ -194,12 +196,6 @@ impl Synth {
         let voice = &mut self.voices[voice_idx];
         voice.target_period = period;
 
-        // dividing by PI was part of the original JX11 and makes the cutoff about 3x lower than the played note
-        voice.cutoff_freq = self.sample_rate / (period * std::f32::consts::PI);
-        if velocity > 0.0 {
-            voice.cutoff_freq *= (self.velocity_sensitivity * (velocity - 64.0)).exp();
-        }
-
         // Glide
         let mut note_distance = 0;
         if self.last_note > 0 {
@@ -208,6 +204,13 @@ impl Synth {
             {
                 note_distance = note - self.last_note;
             }
+        }
+
+        // dividing by PI was part of the original JX11 and makes the cutoff about 3x lower than the played note
+        voice.cutoff_freq = self.sample_rate / (period * std::f32::consts::PI);
+
+        if velocity > 0.0 {
+            voice.cutoff_freq *= (self.velocity_sensitivity * (velocity - 64.0)).exp();
         }
 
         voice.period = period * 1.059463094359_f32.powf(note_distance as f32 - self.glide_bend);
@@ -276,6 +279,7 @@ impl Synth {
         while period < 6.0 || period * self.detune < 6.0 {
             period += period;
         }
+
         period
     }
 
@@ -289,6 +293,12 @@ impl Synth {
             voice.period = period;
         }
 
+        voice.cutoff_freq = self.sample_rate / (period / std::f32::consts::PI);
+
+        if velocity > 0.0 {
+            voice.cutoff_freq *= (self.velocity_sensitivity * (velocity - 64.0)).exp();
+        }
+
         voice.envelope.level += crate::envelope::SILENCE + crate::envelope::SILENCE;
         voice.note = note;
         voice.update_panning();
@@ -296,6 +306,7 @@ impl Synth {
 
     pub fn update_lfo(&mut self) {
         self.lfo_step -= 1;
+
         if self.lfo_step <= 0 {
             self.lfo_step = LFO_MAX as i32;
 
@@ -308,7 +319,11 @@ impl Synth {
             let sine = self.lfo.sin();
             let vibrato_mod = 1.0 + sine * (self.mod_wheel + self.vibrato);
             let pwm = 1.0 + sine * (self.mod_wheel + self.pwm_depth);
-            let filter_mod = self.filter_key_tracking + self.filter_ctrl + (self.filter_lfo_depth + self.pressure) * sine;
+            let filter_mod = self.filter_key_tracking
+                + self.filter_ctrl
+                + (self.filter_lfo_depth + self.pressure) * sine;
+
+            // One Pole low pass filter to smooth filter "zipping"
             self.filter_smoothing += 0.005 * (filter_mod - self.filter_smoothing);
 
             for voice in &mut self.voices {
@@ -352,8 +367,10 @@ impl Synth {
     ) {
         for voice in &mut self.voices {
             if voice.envelope.is_active() {
+                // Update period
                 voice.oscillator_1.period = voice.period * self.pitch_bend;
                 voice.oscillator_2.period = voice.oscillator_1.period * self.detune;
+
                 voice.glide_rate = self.glide_rate;
                 voice.filter_resonance = self.filter_resonance;
                 voice.pitch_bend = self.pitch_bend;

@@ -496,9 +496,9 @@ impl Plugin for RX11 {
                                 voice_id: _,
                                 channel: _,
                                 note, // values are 0..128, maybe I can store as i8 instead of i32?
-                                velocity, // values are 0..1
+                                velocity, // values are normalized 0..1, multiply by 127 to get back to original range
                             } => {
-                                self.synth.note_on(note.into(), velocity);
+                                self.synth.note_on(note.into(), velocity * 127.0);
                             }
                             NoteEvent::NoteOff {
                                 timing: _,
@@ -538,11 +538,13 @@ impl Plugin for RX11 {
                                     self.synth.mod_wheel = 0.000005 * value;
                                 }
 
-                                if cc == 0x4A { // Filter inc
+                                if cc == 0x4A {
+                                    // Filter inc
                                     self.synth.filter_ctrl = 0.02 * value;
                                 }
 
-                                if cc == 0x4B { // Filter dec
+                                if cc == 0x4B {
+                                    // Filter dec
                                     self.synth.filter_ctrl = -0.03 * value;
                                 }
 
@@ -635,7 +637,7 @@ impl Plugin for RX11 {
                 self.synth.ignore_velocity = false;
             }
 
-            let filter_lfo = self.params.filter_lfo.value();
+            let filter_lfo = self.params.filter_lfo.value() / 100.0;
             self.synth.filter_lfo_depth = 2.5 * filter_lfo * filter_lfo;
 
             // Convert range from -1.5..6.5
@@ -644,13 +646,19 @@ impl Plugin for RX11 {
             let filter_resonance = self.params.filter_reso.value() / 100.0;
             self.synth.filter_resonance = (3.0 * filter_resonance).exp();
 
-            self.synth.filter_attack = (-inverse_update_rate * (5.5 - 0.075 * self.params.filter_attack.value()).exp()).exp();
-            self.synth.filter_decay = (-inverse_update_rate * (5.5 - 0.075 * self.params.filter_decay.value()).exp()).exp();
-            self.synth.filter_release = (-inverse_update_rate * (5.5 - 0.075 * self.params.filter_release.value()).exp()).exp();
+            self.synth.filter_attack = (-inverse_update_rate
+                * (5.5 - 0.075 * self.params.filter_attack.value()).exp())
+            .exp();
+            self.synth.filter_decay = (-inverse_update_rate
+                * (5.5 - 0.075 * self.params.filter_decay.value()).exp())
+            .exp();
+            self.synth.filter_release = (-inverse_update_rate
+                * (5.5 - 0.075 * self.params.filter_release.value()).exp())
+            .exp();
             let filter_sustain = self.params.filter_sustain.value() / 100.0;
             self.synth.filter_sustain = filter_sustain * filter_sustain;
             self.synth.filter_env_depth = 0.06 * self.params.filter_env.value();
-            
+
             // LFO & Vibrato: Phase increment = 2PI * freq / sample rate
             let lfo_rate = (7.0 * self.params.lfo_rate.value() - 4.0).exp();
             self.synth.lfo_phase_increment = lfo_rate * inverse_update_rate * std::f32::consts::TAU;
@@ -678,10 +686,11 @@ impl Plugin for RX11 {
             self.synth.noise_mix = noise_mix * 0.06;
 
             // Volume
-            // self.synth.volume_trim =
-            // 0.0008 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix) * (1.5 - 0.5 * self.synth.filter_resonance);
+            self.synth.volume_trim = 0.0008
+                * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix)
+                * (1.5 - 0.5 * self.synth.filter_resonance);
 
-            self.synth.volume_trim = 1.0;
+            //self.synth.volume_trim = 1.0;
             //self.synth.output_level = self.params.output_level.smoothed.next();
 
             // Do I really need to clear the buffer before rendering into it?

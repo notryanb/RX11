@@ -33,7 +33,7 @@ impl Voice {
         self.saw = 0.0;
         self.pan_left = 0.707;
         self.pan_right = 0.707;
-        self.target_period = 0.0;
+
         self.oscillator_1.reset();
         self.oscillator_2.reset();
         self.envelope.reset();
@@ -62,7 +62,9 @@ impl Voice {
 
         let filter_env = self.filter_envelope.next_value();
 
-        let mut modulated_cutoff = self.cutoff_freq * (self.filter_mod + self.filter_env_depth * filter_env).exp() / self.pitch_bend;
+        let mut modulated_cutoff = self.cutoff_freq
+            * (self.filter_mod + self.filter_env_depth * filter_env).exp()
+            / self.pitch_bend;
         modulated_cutoff = modulated_cutoff.clamp(30.0, 20_000.0);
 
         self.filter
