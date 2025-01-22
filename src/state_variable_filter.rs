@@ -11,12 +11,13 @@ pub struct StateVariableFilter {
 }
 
 impl StateVariableFilter {
+    /*
     pub fn new(sample_rate: f32) -> Self {
         Self {
             sample_rate,
             ..Default::default()
         }
-    }
+    }*/
 
     pub fn reset(&mut self) {
         self.g = 0.0;
@@ -30,6 +31,9 @@ impl StateVariableFilter {
     }
 
     pub fn update_coefficients(&mut self, cutoff_freq: f32, resonance: f32) {
+        // I think this needs to be initialized somewhere better
+        self.sample_rate = 44100.0;
+
         self.g = (std::f32::consts::PI * cutoff_freq / self.sample_rate).tan();
         self.k = 1.0 / resonance;
         self.a1 = 1.0 / (1.0 + self.g * (self.g + self.k));

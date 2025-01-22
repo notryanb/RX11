@@ -460,6 +460,10 @@ impl Plugin for RX11 {
         self.params.clone()
     }
 
+    fn reset(&mut self) {
+        self.synth.reset(&self.params);
+    }
+
     fn process(
         &mut self,
         buffer: &mut Buffer,
@@ -707,7 +711,9 @@ impl Plugin for RX11 {
         ProcessStatus::Normal
     }
 
-    fn deactivate(&mut self) {}
+    fn deactivate(&mut self) {
+        nih_log!("Deactivation");
+    }
 }
 
 impl ClapPlugin for RX11 {

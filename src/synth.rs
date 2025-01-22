@@ -92,7 +92,7 @@ impl Synth {
         }
     }
 
-    pub fn reset(&mut self) {
+    pub fn reset(&mut self, params: &RX11Params) {
         for voice in &mut self.voices {
             voice.reset();
         }
@@ -107,7 +107,8 @@ impl Synth {
         self.filter_ctrl = 0.0;
         self.pressure = 0.0;
         self.filter_smoothing = 0.0;
-        // TODO - reset output_level smoother
+
+        params.output_level.smoothed.reset(0.05);
     }
 
     pub fn note_on(&mut self, note: i32, velocity: f32) {
