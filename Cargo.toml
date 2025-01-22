@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+# The `lib` artifact is needed for the standalone target
+crate-type = ["cdylib", "lib"]
 
 [workspace]
 members = ["xtask"]
 
 [dependencies]
 parking_lot = "0.12"
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs"] }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "standalone"] }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 

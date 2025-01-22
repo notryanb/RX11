@@ -2,6 +2,7 @@ use nih_plug::midi::control_change::{
     ALL_NOTES_OFF, ALL_SOUND_OFF, MAIN_VOLUME_MSB, MODULATION_MSB,
 };
 use nih_plug::prelude::*;
+use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 
 use std::sync::Arc;
 
@@ -37,13 +38,18 @@ pub enum GlideMode {
     Always,
 }
 
-struct RX11 {
+pub struct RX11 {
     params: Arc<RX11Params>,
     synth: Synth,
 }
 
 #[derive(Params)]
-struct RX11Params {
+pub struct RX11Params {
+    /// The editor state, saved together with the parameter state so the custom scaling can be
+    /// restored.
+    #[persist = "editor-state"]
+    editor_state: Arc<EguiState>,
+
     #[id = "osc_mix"]
     pub osc_mix: FloatParam,
 
@@ -135,6 +141,8 @@ impl Default for RX11 {
 impl Default for RX11Params {
     fn default() -> Self {
         Self {
+            editor_state: EguiState::from_size(480, 480),
+
             osc_mix: FloatParam::new(
                 "Osc Mix",
                 0.0,
@@ -462,6 +470,25 @@ impl Plugin for RX11 {
 
     fn reset(&mut self) {
         self.synth.reset(&self.params);
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> { 
+        let params = self.params.clone();
+
+        create_egui_editor(
+            self.params.editor_state.clone(),
+            (),
+            |_, _| {},
+            move |egui_ctx, setter, _state| {
+                egui::CentralPanel::default().show(egui_ctx, |ui| {
+                    ui.label("Output Level");
+                    ui.add(widgets::ParamSlider::for_param(&params.output_level, setter));
+
+                    ui.label("Filter Freq");
+                    ui.add(widgets::ParamSlider::for_param(&params.filter_freq, setter));
+                });
+            },
+        )
     }
 
     fn process(
