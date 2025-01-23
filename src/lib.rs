@@ -17,7 +17,7 @@ use crate::synth::Synth;
 
 const MAX_BLOCK_SIZE: usize = 64;
 
-#[derive(Enum, PartialEq)]
+#[derive(Clone, Enum, PartialEq)]
 pub enum PolyMode {
     #[id = "mono"]
     Mono,
@@ -26,7 +26,7 @@ pub enum PolyMode {
     Poly,
 }
 
-#[derive(Enum, PartialEq)]
+#[derive(Clone, Enum, PartialEq)]
 pub enum GlideMode {
     #[id = "off"]
     Off,
@@ -141,7 +141,7 @@ impl Default for RX11 {
 impl Default for RX11Params {
     fn default() -> Self {
         Self {
-            editor_state: EguiState::from_size(480, 480),
+            editor_state: EguiState::from_size(800, 600),
 
             osc_mix: FloatParam::new(
                 "Osc Mix",
@@ -480,12 +480,125 @@ impl Plugin for RX11 {
             (),
             |_, _| {},
             move |egui_ctx, setter, _state| {
+                egui::TopBottomPanel::top("my_panel").show(egui_ctx, |ui| {
+                   ui.label("RX11: I think this is where I'll put menu stuff.");
+                });
                 egui::CentralPanel::default().show(egui_ctx, |ui| {
-                    ui.label("Output Level");
-                    ui.add(widgets::ParamSlider::for_param(&params.output_level, setter));
 
-                    ui.label("Filter Freq");
-                    ui.add(widgets::ParamSlider::for_param(&params.filter_freq, setter));
+                    egui::ScrollArea::vertical()
+                        .scroll_bar_visibility(egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                        .show(ui, |ui| {
+                            let glide_mode = &params.glide_mode.value();
+                            ui.horizontal(|ui| {
+                                if ui.add(egui::widgets::SelectableLabel::new(*glide_mode == GlideMode::Off, "Glide Off")).clicked() {
+                                    setter.begin_set_parameter(&params.glide_mode);
+                                    setter.set_parameter(&params.glide_mode, GlideMode::Off);
+                                    setter.end_set_parameter(&params.glide_mode);
+                                }
+                                if ui.add(egui::widgets::SelectableLabel::new(*glide_mode == GlideMode::Legato, "Legato")).clicked() {
+                                    setter.begin_set_parameter(&params.glide_mode);
+                                    setter.set_parameter(&params.glide_mode, GlideMode::Legato);
+                                    setter.end_set_parameter(&params.glide_mode);
+                                }
+                                if ui.add(egui::widgets::SelectableLabel::new(*glide_mode == GlideMode::Always, "Glide Always")).clicked() {
+                                    setter.begin_set_parameter(&params.glide_mode);
+                                    setter.set_parameter(&params.glide_mode, GlideMode::Always);
+                                    setter.end_set_parameter(&params.glide_mode);
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.separator();
+
+                            let poly_mode = &params.poly_mode.value();
+                            ui.horizontal(|ui| {
+                                if ui.add(egui::widgets::SelectableLabel::new(*poly_mode == PolyMode::Mono, "Mono")).clicked() {
+                                    setter.begin_set_parameter(&params.poly_mode);
+                                    setter.set_parameter(&params.poly_mode, PolyMode::Mono);
+                                    setter.end_set_parameter(&params.poly_mode);
+                                }
+                                if ui.add(egui::widgets::SelectableLabel::new(*poly_mode == PolyMode::Poly, "Poly")).clicked() {
+                                    setter.begin_set_parameter(&params.poly_mode);
+                                    setter.set_parameter(&params.poly_mode, PolyMode::Poly);
+                                    setter.end_set_parameter(&params.poly_mode);
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.separator();
+
+                            ui.label("Oscillator Mix");
+                            ui.add(widgets::ParamSlider::for_param(&params.osc_mix, setter));
+                    
+                            ui.label("Oscillator Tune");
+                            ui.add(widgets::ParamSlider::for_param(&params.osc_tune, setter));
+
+                            ui.label("Oscillator Fine Tune");
+                            ui.add(widgets::ParamSlider::for_param(&params.osc_fine_tune, setter));
+
+                            ui.label("Glide Rate");
+                            ui.add(widgets::ParamSlider::for_param(&params.glide_rate, setter));
+
+                            ui.label("Glide Bend");
+                            ui.add(widgets::ParamSlider::for_param(&params.glide_bend, setter));
+
+                            ui.label("Filter Frequency");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_freq, setter));
+
+                            ui.label("Filter Resonance");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_reso, setter));
+
+                            ui.label("Filter LFO");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_lfo, setter));
+
+                            ui.label("Filter Velocity");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_velocity, setter));
+
+                            ui.label("Filter ADSR");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_env, setter));
+
+                            ui.label("Filter Attack");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_attack, setter));
+
+                            ui.label("Filter Decay");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_decay, setter));
+
+                            ui.label("Filter Sustain");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_sustain, setter));
+
+                            ui.label("Filter Release");
+                            ui.add(widgets::ParamSlider::for_param(&params.filter_release, setter));
+
+                            ui.label("Envelope Attack");
+                            ui.add(widgets::ParamSlider::for_param(&params.env_attack, setter));
+
+                            ui.label("Envelope Decay");
+                            ui.add(widgets::ParamSlider::for_param(&params.env_decay, setter));
+
+                            ui.label("Envelope Sustain");
+                            ui.add(widgets::ParamSlider::for_param(&params.env_sustain, setter));
+
+                            ui.label("Envelope Release");
+                            ui.add(widgets::ParamSlider::for_param(&params.env_release, setter));
+
+                            ui.label("LFO Rate");
+                            ui.add(widgets::ParamSlider::for_param(&params.lfo_rate, setter));
+
+                            ui.label("Vibrato");
+                            ui.add(widgets::ParamSlider::for_param(&params.vibrato, setter));
+
+                            ui.label("Noise");
+                            ui.add(widgets::ParamSlider::for_param(&params.noise_level, setter));
+
+                            ui.label("Octave");
+                            ui.add(widgets::ParamSlider::for_param(&params.octave, setter));
+
+                            ui.label("Tuning");
+                            ui.add(widgets::ParamSlider::for_param(&params.tuning, setter));
+
+                            ui.label("Volume");
+                            ui.add(widgets::ParamSlider::for_param(&params.output_level, setter));
+                    })
                 });
             },
         )
