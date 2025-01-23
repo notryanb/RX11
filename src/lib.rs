@@ -38,9 +38,19 @@ pub enum GlideMode {
     Always,
 }
 
+// TODO: This is naive-AF. Just a proof of concept to see if I can set params via the GUI.
+// Needs to support saving presets and maybe locking down vendored ones. Investigate how other plugins
+// expose management. I'm not thrilled about a String interface instead of something typesafe.
+#[derive(Clone)]
+pub struct Preset {
+    pub name: String,
+    pub values: Vec<(String, String)>,
+}
+
 pub struct RX11 {
     params: Arc<RX11Params>,
     synth: Synth,
+    presets: Vec<Preset>,
 }
 
 #[derive(Params)]
@@ -134,6 +144,11 @@ impl Default for RX11 {
         Self {
             params: Arc::new(RX11Params::default()),
             synth: Synth::new(),
+            presets: vec![
+              Preset { name: "test".to_string(), values: vec![
+                  ("filter_reso".to_string(), "66.6".to_string())
+              ]}  
+            ],
         }
     }
 }
@@ -474,14 +489,37 @@ impl Plugin for RX11 {
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> { 
         let params = self.params.clone();
+        let presets = self.presets.clone();
 
         create_egui_editor(
             self.params.editor_state.clone(),
             (),
             |_, _| {},
             move |egui_ctx, setter, _state| {
-                egui::TopBottomPanel::top("my_panel").show(egui_ctx, |ui| {
-                   ui.label("RX11: I think this is where I'll put menu stuff.");
+                egui::TopBottomPanel::top("menu").show(egui_ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        // Displaying the presets
+                        ui.menu_button("Presets", |ui| {
+                            for preset in &presets {
+                                if ui.button(&preset.name).clicked() {
+                                    // for each parameter in the preset,
+                                    // parse the value and then set it...
+                                    // This is terrible...
+                                    for (param, value) in &preset.values {
+                                        if &param[..] == "filter_reso" {
+                                            let val = value.parse::<f32>().expect("Failed to parse param val...");
+                                            setter.begin_set_parameter(&params.filter_reso);
+                                            setter.set_parameter(&params.filter_reso, val);
+                                            setter.end_set_parameter(&params.filter_reso);
+
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        ui.label("RX11: I think this is where I'll put menu stuff.");
+                    })
+
                 });
                 egui::CentralPanel::default().show(egui_ctx, |ui| {
 
