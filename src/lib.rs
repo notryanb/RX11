@@ -9,11 +9,13 @@ use std::sync::Arc;
 mod envelope;
 mod noise_generator;
 mod oscillator;
+mod presets;
 mod state_variable_filter;
 mod synth;
 mod voice;
 
 use crate::synth::Synth;
+use crate::presets::Presets;
 
 const MAX_BLOCK_SIZE: usize = 64;
 
@@ -24,6 +26,22 @@ pub enum PolyMode {
 
     #[id = "poly"]
     Poly,
+}
+
+impl PolyMode {
+    pub fn to_f32(pm: PolyMode) -> f32 {
+        match pm {
+            PolyMode::Mono => 0.0,
+            PolyMode::Poly => 1.0,
+        }        
+    }
+
+    pub fn from_f32(i: f32) -> Self {
+        match i {
+            1.0 => PolyMode::Poly,
+            _ => PolyMode::Mono,
+        }
+    }
 }
 
 #[derive(Clone, Enum, PartialEq)]
@@ -38,19 +56,28 @@ pub enum GlideMode {
     Always,
 }
 
-// TODO: This is naive-AF. Just a proof of concept to see if I can set params via the GUI.
-// Needs to support saving presets and maybe locking down vendored ones. Investigate how other plugins
-// expose management. I'm not thrilled about a String interface instead of something typesafe.
-#[derive(Clone)]
-pub struct Preset {
-    pub name: String,
-    pub values: Vec<(String, String)>,
+impl GlideMode {
+    pub fn to_f32(gm: GlideMode) -> f32 {
+        match gm {
+            GlideMode::Off => 0.0,
+            GlideMode::Legato => 1.0,
+            GlideMode::Always => 2.0,
+        }        
+    }
+
+    pub fn from_f32(i: f32) -> Self {
+        match i {
+            2.0 => GlideMode::Always,
+            1.0 => GlideMode::Legato,
+            _ => GlideMode::Off,
+        }
+    }
 }
 
 pub struct RX11 {
     params: Arc<RX11Params>,
     synth: Synth,
-    presets: Vec<Preset>,
+    presets: Presets,
 }
 
 #[derive(Params)]
@@ -144,11 +171,7 @@ impl Default for RX11 {
         Self {
             params: Arc::new(RX11Params::default()),
             synth: Synth::new(),
-            presets: vec![
-              Preset { name: "test".to_string(), values: vec![
-                  ("filter_reso".to_string(), "66.6".to_string())
-              ]}  
-            ],
+            presets: Presets::init(),
         }
     }
 }
@@ -498,20 +521,53 @@ impl Plugin for RX11 {
             move |egui_ctx, setter, _state| {
                 egui::TopBottomPanel::top("menu").show(egui_ctx, |ui| {
                     ui.horizontal(|ui| {
-                        // Displaying the presets
+                        // Displaying / selecting the presets
                         ui.menu_button("Presets", |ui| {
-                            for preset in &presets {
+                            for preset in &presets.0 {
                                 if ui.button(&preset.name).clicked() {
-                                    // for each parameter in the preset,
-                                    // parse the value and then set it...
-                                    // This is terrible...
-                                    for (param, value) in &preset.values {
-                                        if &param[..] == "filter_reso" {
-                                            let val = value.parse::<f32>().expect("Failed to parse param val...");
-                                            setter.begin_set_parameter(&params.filter_reso);
-                                            setter.set_parameter(&params.filter_reso, val);
-                                            setter.end_set_parameter(&params.filter_reso);
+                                    for (param_name, param_value) in &preset.values {
+                                        if &param_name[..] == "glide_mode" {
+                                            setter.begin_set_parameter(&params.glide_mode);
+                                            setter.set_parameter(&params.glide_mode, GlideMode::from_f32(*param_value));
+                                            setter.end_set_parameter(&params.glide_mode);
+                                        } else if &param_name[..] == "poly_mode" {
+                                            setter.begin_set_parameter(&params.poly_mode);
+                                            setter.set_parameter(&params.poly_mode, PolyMode::from_f32(*param_value));
+                                            setter.end_set_parameter(&params.poly_mode);
+                                        } else {
+                                            let param = match &param_name[..] {
+                                                "osc_mix" => Some(&params.osc_mix),
+                                                "osc_tune" => Some(&params.osc_tune),
+                                                "osc_fine_tune" => Some(&params.osc_fine_tune),
+                                                "glide_rate" => Some(&params.glide_rate),
+                                                "glide_bend" => Some(&params.glide_bend),
+                                                "filter_freq" => Some(&params.filter_freq),
+                                                "filter_reso" => Some(&params.filter_reso),
+                                                "filter_env" => Some(&params.filter_env),
+                                                "filter_lfo" => Some(&params.filter_lfo),
+                                                "filter_velocity" => Some(&params.filter_velocity),
+                                                "filter_attack" => Some(&params.filter_attack),
+                                                "filter_decay" => Some(&params.filter_decay),
+                                                "filter_sustain" => Some(&params.filter_sustain),
+                                                "filter_release" => Some(&params.filter_release),
+                                                "env_attack" => Some(&params.env_attack),
+                                                "env_decay" => Some(&params.env_decay),
+                                                "env_sustain" => Some(&params.env_sustain),
+                                                "env_release" => Some(&params.env_release),
+                                                "lfo_rate" => Some(&params.lfo_rate),
+                                                "vibrato" => Some(&params.vibrato),
+                                                "noise" => Some(&params.noise_level),
+                                                "octave" => Some(&params.octave),
+                                                "tuning" => Some(&params.tuning),
+                                                "output" => Some(&params.output_level),
+                                                _ => None,
+                                            };
 
+                                            if let Some(param) = param {
+                                                setter.begin_set_parameter(param);
+                                                setter.set_parameter(param, *param_value);
+                                                setter.end_set_parameter(param);
+                                            }
                                         }
                                     }
                                 }
