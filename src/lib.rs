@@ -14,8 +14,8 @@ mod state_variable_filter;
 mod synth;
 mod voice;
 
-use crate::synth::Synth;
 use crate::presets::Presets;
+use crate::synth::Synth;
 
 const MAX_BLOCK_SIZE: usize = 64;
 
@@ -33,7 +33,7 @@ impl PolyMode {
         match pm {
             PolyMode::Mono => 0.0,
             PolyMode::Poly => 1.0,
-        }        
+        }
     }
 
     pub fn from_f32(i: f32) -> Self {
@@ -62,7 +62,7 @@ impl GlideMode {
             GlideMode::Off => 0.0,
             GlideMode::Legato => 1.0,
             GlideMode::Always => 2.0,
-        }        
+        }
     }
 
     pub fn from_f32(i: f32) -> Self {
@@ -510,7 +510,7 @@ impl Plugin for RX11 {
         self.synth.reset(&self.params);
     }
 
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> { 
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         let params = self.params.clone();
         let presets = self.presets.clone();
 
@@ -528,11 +528,17 @@ impl Plugin for RX11 {
                                     for (param_name, param_value) in &preset.values {
                                         if &param_name[..] == "glide_mode" {
                                             setter.begin_set_parameter(&params.glide_mode);
-                                            setter.set_parameter(&params.glide_mode, GlideMode::from_f32(*param_value));
+                                            setter.set_parameter(
+                                                &params.glide_mode,
+                                                GlideMode::from_f32(*param_value),
+                                            );
                                             setter.end_set_parameter(&params.glide_mode);
                                         } else if &param_name[..] == "poly_mode" {
                                             setter.begin_set_parameter(&params.poly_mode);
-                                            setter.set_parameter(&params.poly_mode, PolyMode::from_f32(*param_value));
+                                            setter.set_parameter(
+                                                &params.poly_mode,
+                                                PolyMode::from_f32(*param_value),
+                                            );
                                             setter.end_set_parameter(&params.poly_mode);
                                         } else {
                                             let param = match &param_name[..] {
@@ -575,26 +581,44 @@ impl Plugin for RX11 {
                         });
                         ui.label("RX11: I think this is where I'll put menu stuff.");
                     })
-
                 });
                 egui::CentralPanel::default().show(egui_ctx, |ui| {
-
                     egui::ScrollArea::vertical()
-                        .scroll_bar_visibility(egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                        .scroll_bar_visibility(
+                            egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible,
+                        )
                         .show(ui, |ui| {
                             let glide_mode = &params.glide_mode.value();
                             ui.horizontal(|ui| {
-                                if ui.add(egui::widgets::SelectableLabel::new(*glide_mode == GlideMode::Off, "Glide Off")).clicked() {
+                                if ui
+                                    .add(egui::widgets::SelectableLabel::new(
+                                        *glide_mode == GlideMode::Off,
+                                        "Glide Off",
+                                    ))
+                                    .clicked()
+                                {
                                     setter.begin_set_parameter(&params.glide_mode);
                                     setter.set_parameter(&params.glide_mode, GlideMode::Off);
                                     setter.end_set_parameter(&params.glide_mode);
                                 }
-                                if ui.add(egui::widgets::SelectableLabel::new(*glide_mode == GlideMode::Legato, "Legato")).clicked() {
+                                if ui
+                                    .add(egui::widgets::SelectableLabel::new(
+                                        *glide_mode == GlideMode::Legato,
+                                        "Legato",
+                                    ))
+                                    .clicked()
+                                {
                                     setter.begin_set_parameter(&params.glide_mode);
                                     setter.set_parameter(&params.glide_mode, GlideMode::Legato);
                                     setter.end_set_parameter(&params.glide_mode);
                                 }
-                                if ui.add(egui::widgets::SelectableLabel::new(*glide_mode == GlideMode::Always, "Glide Always")).clicked() {
+                                if ui
+                                    .add(egui::widgets::SelectableLabel::new(
+                                        *glide_mode == GlideMode::Always,
+                                        "Glide Always",
+                                    ))
+                                    .clicked()
+                                {
                                     setter.begin_set_parameter(&params.glide_mode);
                                     setter.set_parameter(&params.glide_mode, GlideMode::Always);
                                     setter.end_set_parameter(&params.glide_mode);
@@ -606,12 +630,24 @@ impl Plugin for RX11 {
 
                             let poly_mode = &params.poly_mode.value();
                             ui.horizontal(|ui| {
-                                if ui.add(egui::widgets::SelectableLabel::new(*poly_mode == PolyMode::Mono, "Mono")).clicked() {
+                                if ui
+                                    .add(egui::widgets::SelectableLabel::new(
+                                        *poly_mode == PolyMode::Mono,
+                                        "Mono",
+                                    ))
+                                    .clicked()
+                                {
                                     setter.begin_set_parameter(&params.poly_mode);
                                     setter.set_parameter(&params.poly_mode, PolyMode::Mono);
                                     setter.end_set_parameter(&params.poly_mode);
                                 }
-                                if ui.add(egui::widgets::SelectableLabel::new(*poly_mode == PolyMode::Poly, "Poly")).clicked() {
+                                if ui
+                                    .add(egui::widgets::SelectableLabel::new(
+                                        *poly_mode == PolyMode::Poly,
+                                        "Poly",
+                                    ))
+                                    .clicked()
+                                {
                                     setter.begin_set_parameter(&params.poly_mode);
                                     setter.set_parameter(&params.poly_mode, PolyMode::Poly);
                                     setter.end_set_parameter(&params.poly_mode);
@@ -623,12 +659,15 @@ impl Plugin for RX11 {
 
                             ui.label("Oscillator Mix");
                             ui.add(widgets::ParamSlider::for_param(&params.osc_mix, setter));
-                    
+
                             ui.label("Oscillator Tune");
                             ui.add(widgets::ParamSlider::for_param(&params.osc_tune, setter));
 
                             ui.label("Oscillator Fine Tune");
-                            ui.add(widgets::ParamSlider::for_param(&params.osc_fine_tune, setter));
+                            ui.add(widgets::ParamSlider::for_param(
+                                &params.osc_fine_tune,
+                                setter,
+                            ));
 
                             ui.label("Glide Rate");
                             ui.add(widgets::ParamSlider::for_param(&params.glide_rate, setter));
@@ -646,22 +685,37 @@ impl Plugin for RX11 {
                             ui.add(widgets::ParamSlider::for_param(&params.filter_lfo, setter));
 
                             ui.label("Filter Velocity");
-                            ui.add(widgets::ParamSlider::for_param(&params.filter_velocity, setter));
+                            ui.add(widgets::ParamSlider::for_param(
+                                &params.filter_velocity,
+                                setter,
+                            ));
 
                             ui.label("Filter ADSR");
                             ui.add(widgets::ParamSlider::for_param(&params.filter_env, setter));
 
                             ui.label("Filter Attack");
-                            ui.add(widgets::ParamSlider::for_param(&params.filter_attack, setter));
+                            ui.add(widgets::ParamSlider::for_param(
+                                &params.filter_attack,
+                                setter,
+                            ));
 
                             ui.label("Filter Decay");
-                            ui.add(widgets::ParamSlider::for_param(&params.filter_decay, setter));
+                            ui.add(widgets::ParamSlider::for_param(
+                                &params.filter_decay,
+                                setter,
+                            ));
 
                             ui.label("Filter Sustain");
-                            ui.add(widgets::ParamSlider::for_param(&params.filter_sustain, setter));
+                            ui.add(widgets::ParamSlider::for_param(
+                                &params.filter_sustain,
+                                setter,
+                            ));
 
                             ui.label("Filter Release");
-                            ui.add(widgets::ParamSlider::for_param(&params.filter_release, setter));
+                            ui.add(widgets::ParamSlider::for_param(
+                                &params.filter_release,
+                                setter,
+                            ));
 
                             ui.label("Envelope Attack");
                             ui.add(widgets::ParamSlider::for_param(&params.env_attack, setter));
@@ -691,8 +745,11 @@ impl Plugin for RX11 {
                             ui.add(widgets::ParamSlider::for_param(&params.tuning, setter));
 
                             ui.label("Volume");
-                            ui.add(widgets::ParamSlider::for_param(&params.output_level, setter));
-                    })
+                            ui.add(widgets::ParamSlider::for_param(
+                                &params.output_level,
+                                setter,
+                            ));
+                        })
                 });
             },
         )
@@ -926,7 +983,7 @@ impl Plugin for RX11 {
             // Volume
             self.synth.volume_trim = 0.0008
                 * (3.2 - self.synth.osc_mix - 25.0 * self.synth.noise_mix)
-                * (1.5 - 0.5 * self.synth.filter_resonance);
+                * (1.5 - 0.5 * filter_resonance);
 
             //self.synth.volume_trim = 1.0;
             //self.synth.output_level = self.params.output_level.smoothed.next();

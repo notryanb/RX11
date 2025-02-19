@@ -1,4 +1,4 @@
-use crate::{PolyMode, GlideMode};
+use crate::{GlideMode, PolyMode};
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -52,9 +52,8 @@ impl Presets {
                 .add_param("noise", 0.0)
                 .add_param("octave", 0.0)
                 .add_param("tuning", 0.0)
-                .add_param("output", 0.0)
+                .add_param("output", 1.0)
                 .add_param("poly_mode", PolyMode::to_f32(PolyMode::Poly)),
-
             Preset::new("5th Sweep Pad")
                 .add_param("osc_mix", 100.0)
                 .add_param("osc_tune", -7.0)
@@ -80,9 +79,35 @@ impl Presets {
                 .add_param("noise", 0.0)
                 .add_param("octave", 0.0)
                 .add_param("tuning", 0.0)
-                .add_param("output", 0.0)
+                .add_param("output", 1.0)
+                .add_param("poly_mode", PolyMode::to_f32(PolyMode::Poly)),
+            Preset::new("Echo Pad [SA]")
+                .add_param("osc_mix", 88.0)
+                .add_param("osc_tune", 0.0)
+                .add_param("osc_fine_tune", 0.0)
+                .add_param("glide_mode", GlideMode::to_f32(GlideMode::Off))
+                .add_param("glide_rate", 49.0)
+                .add_param("glide_bend", 0.0)
+                .add_param("filter_freq", 46.0)
+                .add_param("filter_reso", 76.0)
+                .add_param("filter_env", 38.0)
+                .add_param("filter_lfo", 10.0)
+                .add_param("filter_velocity", 38.0)
+                .add_param("filter_attack", 100.0)
+                .add_param("filter_decay", 86.0)
+                .add_param("filter_sustain", 76.0)
+                .add_param("filter_release", 57.0)
+                .add_param("env_attack", 30.0)
+                .add_param("env_decay", 80.0)
+                .add_param("env_sustain", 68.0)
+                .add_param("env_release", 66.0)
+                .add_param("lfo_rate", 0.79)
+                .add_param("vibrato", -74.0)
+                .add_param("noise", 25.0)
+                .add_param("octave", 0.0)
+                .add_param("tuning", 0.0)
+                .add_param("output", 1.0)
                 .add_param("poly_mode", PolyMode::to_f32(PolyMode::Poly)),
         ])
     }
 }
-
