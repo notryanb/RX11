@@ -188,8 +188,8 @@ impl Default for RX11Params {
                     min: 0.0,
                     max: 100.0,
                 },
-            ) // TODO - implement the function from the book which shows the ratio 50:50 for fullly mixed
-            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            ) 
+            .with_value_to_string(Arc::new(|value| format!("{:.0}:{:.0}", 100.0 - 0.5 * value, 0.5 * value))),
 
             osc_tune: FloatParam::new(
                 "Osc Tune",
@@ -302,9 +302,15 @@ impl Default for RX11Params {
                     max: 100.0,
                 },
             )
-            .with_unit("%") // TODO: Should have a custom formatter which sets to "OFF" when < -90.0f32
             .with_step_size(1.0)
-            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            .with_value_to_string(Arc::new(|value| {
+                    if value < -90.0 {
+                        String::from("Off")
+                    } else {
+                        format!("{value:.2}")
+                    }
+                })
+            ),
 
             filter_attack: FloatParam::new(
                 "Filter Attack",
@@ -402,13 +408,12 @@ impl Default for RX11Params {
             .with_step_size(1.0)
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
 
-            // TODO: LFO Rate needs a custom formatter which converts the 0..1 range to Hz ``(7.0 * value - 4.0).exp`
             lfo_rate: FloatParam::new("LFO Rate", 0.81, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("Hz")
                 .with_step_size(0.01)
-                .with_value_to_string(formatters::v2s_f32_rounded(2)),
+                .with_value_to_string(Arc::new(|value| format!("{:.2}", (7.0 * value - 4.0).exp()))
+            ),
 
-            // TODO: Vibrato needs custom formatter which says "PWM" if < 0.0f32
             vibrato: FloatParam::new(
                 "Vibrato",
                 0.0,
@@ -419,7 +424,14 @@ impl Default for RX11Params {
             )
             .with_unit("Hz")
             .with_step_size(0.1)
-            .with_value_to_string(formatters::v2s_f32_rounded(2)),
+            .with_value_to_string(Arc::new(|value| {
+                    if value < 0.0 {
+                        format!("PWM {:.2}", -value)
+                    } else {
+                        format!("{value:.2}")
+                    }
+                })
+            ),
 
             octave: FloatParam::new(
                 "Octave",
