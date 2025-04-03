@@ -138,7 +138,7 @@ impl Synth {
 
     // FIXME: Add test cases
     pub fn shift_queued_notes(&mut self) {
-        for tmp in (0..MAX_VOICES).rev() {
+        for tmp in (1..(MAX_VOICES - 1)).rev() {
             self.voices[tmp].note = self.voices[tmp - 1].note;
         }
     }
