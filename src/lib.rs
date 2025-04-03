@@ -536,62 +536,68 @@ impl Plugin for RX11 {
                     ui.horizontal(|ui| {
                         // Displaying / selecting the presets
                         ui.menu_button("Presets", |ui| {
-                            for preset in &presets.0 {
-                                if ui.button(&preset.name).clicked() {
-                                    for (param_name, param_value) in &preset.values {
-                                        if &param_name[..] == "glide_mode" {
-                                            setter.begin_set_parameter(&params.glide_mode);
-                                            setter.set_parameter(
-                                                &params.glide_mode,
-                                                GlideMode::from_f32(*param_value),
-                                            );
-                                            setter.end_set_parameter(&params.glide_mode);
-                                        } else if &param_name[..] == "poly_mode" {
-                                            setter.begin_set_parameter(&params.poly_mode);
-                                            setter.set_parameter(
-                                                &params.poly_mode,
-                                                PolyMode::from_f32(*param_value),
-                                            );
-                                            setter.end_set_parameter(&params.poly_mode);
-                                        } else {
-                                            let param = match &param_name[..] {
-                                                "osc_mix" => Some(&params.osc_mix),
-                                                "osc_tune" => Some(&params.osc_tune),
-                                                "osc_fine_tune" => Some(&params.osc_fine_tune),
-                                                "glide_rate" => Some(&params.glide_rate),
-                                                "glide_bend" => Some(&params.glide_bend),
-                                                "filter_freq" => Some(&params.filter_freq),
-                                                "filter_reso" => Some(&params.filter_reso),
-                                                "filter_env" => Some(&params.filter_env),
-                                                "filter_lfo" => Some(&params.filter_lfo),
-                                                "filter_velocity" => Some(&params.filter_velocity),
-                                                "filter_attack" => Some(&params.filter_attack),
-                                                "filter_decay" => Some(&params.filter_decay),
-                                                "filter_sustain" => Some(&params.filter_sustain),
-                                                "filter_release" => Some(&params.filter_release),
-                                                "env_attack" => Some(&params.env_attack),
-                                                "env_decay" => Some(&params.env_decay),
-                                                "env_sustain" => Some(&params.env_sustain),
-                                                "env_release" => Some(&params.env_release),
-                                                "lfo_rate" => Some(&params.lfo_rate),
-                                                "vibrato" => Some(&params.vibrato),
-                                                "noise" => Some(&params.noise_level),
-                                                "octave" => Some(&params.octave),
-                                                "tuning" => Some(&params.tuning),
-                                                "output" => Some(&params.output_level),
-                                                _ => None,
-                                            };
+                            egui::ScrollArea::vertical()
+                                .scroll_bar_visibility(
+                                    egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible,
+                                )
+                                .show(ui, |ui| {
+                                    for preset in &presets.0 {
+                                        if ui.button(&preset.name).clicked() {
+                                            for (param_name, param_value) in &preset.values {
+                                                if &param_name[..] == "glide_mode" {
+                                                    setter.begin_set_parameter(&params.glide_mode);
+                                                    setter.set_parameter(
+                                                        &params.glide_mode,
+                                                        GlideMode::from_f32(*param_value),
+                                                    );
+                                                    setter.end_set_parameter(&params.glide_mode);
+                                                } else if &param_name[..] == "poly_mode" {
+                                                    setter.begin_set_parameter(&params.poly_mode);
+                                                    setter.set_parameter(
+                                                        &params.poly_mode,
+                                                        PolyMode::from_f32(*param_value),
+                                                    );
+                                                    setter.end_set_parameter(&params.poly_mode);
+                                                } else {
+                                                    let param = match &param_name[..] {
+                                                        "osc_mix" => Some(&params.osc_mix),
+                                                        "osc_tune" => Some(&params.osc_tune),
+                                                        "osc_fine_tune" => Some(&params.osc_fine_tune),
+                                                        "glide_rate" => Some(&params.glide_rate),
+                                                        "glide_bend" => Some(&params.glide_bend),
+                                                        "filter_freq" => Some(&params.filter_freq),
+                                                        "filter_reso" => Some(&params.filter_reso),
+                                                        "filter_env" => Some(&params.filter_env),
+                                                        "filter_lfo" => Some(&params.filter_lfo),
+                                                        "filter_velocity" => Some(&params.filter_velocity),
+                                                        "filter_attack" => Some(&params.filter_attack),
+                                                        "filter_decay" => Some(&params.filter_decay),
+                                                        "filter_sustain" => Some(&params.filter_sustain),
+                                                        "filter_release" => Some(&params.filter_release),
+                                                        "env_attack" => Some(&params.env_attack),
+                                                        "env_decay" => Some(&params.env_decay),
+                                                        "env_sustain" => Some(&params.env_sustain),
+                                                        "env_release" => Some(&params.env_release),
+                                                        "lfo_rate" => Some(&params.lfo_rate),
+                                                        "vibrato" => Some(&params.vibrato),
+                                                        "noise" => Some(&params.noise_level),
+                                                        "octave" => Some(&params.octave),
+                                                        "tuning" => Some(&params.tuning),
+                                                        "output" => Some(&params.output_level),
+                                                        _ => None,
+                                                    };
 
-                                            if let Some(param) = param {
-                                                setter.begin_set_parameter(param);
-                                                setter.set_parameter(param, *param_value);
-                                                setter.end_set_parameter(param);
+                                                    if let Some(param) = param {
+                                                        setter.begin_set_parameter(param);
+                                                        setter.set_parameter(param, *param_value);
+                                                        setter.end_set_parameter(param);
+                                                    }
+                                                }
                                             }
                                         }
                                     }
-                                }
-                            }
-                        });
+                            })
+                        }); // End MenuButton
                         ui.label("RX11: I think this is where I'll put menu stuff.");
                     })
                 });
