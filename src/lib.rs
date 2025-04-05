@@ -78,7 +78,20 @@ pub struct RX11 {
     params: Arc<RX11Params>,
     synth: Synth,
     presets: Presets,
+    selected_preset: String,
 }
+
+impl Default for RX11 {
+    fn default() -> Self {
+        Self {
+            params: Arc::new(RX11Params::default()),
+            synth: Synth::new(),
+            presets: Presets::init(),
+            selected_preset: "Init".into(),
+        }
+    }
+}
+
 
 #[derive(Params)]
 pub struct RX11Params {
@@ -164,16 +177,6 @@ pub struct RX11Params {
 
     #[id = "output"]
     pub output_level: FloatParam,
-}
-
-impl Default for RX11 {
-    fn default() -> Self {
-        Self {
-            params: Arc::new(RX11Params::default()),
-            synth: Synth::new(),
-            presets: Presets::init(),
-        }
-    }
 }
 
 impl Default for RX11Params {
@@ -529,9 +532,11 @@ impl Plugin for RX11 {
 
         create_egui_editor(
             self.params.editor_state.clone(),
-            (),
+            self.selected_preset.clone(),
             |_, _| {},
-            move |egui_ctx, setter, _state| {
+            move |egui_ctx, setter, state| {
+                let selected_preset = state;
+                
                 egui::TopBottomPanel::top("menu").show(egui_ctx, |ui| {
                     ui.horizontal(|ui| {
                         // Displaying / selecting the presets
@@ -543,6 +548,8 @@ impl Plugin for RX11 {
                                 .show(ui, |ui| {
                                     for preset in &presets.0 {
                                         if ui.button(&preset.name).clicked() {
+                                            *selected_preset = preset.name.clone();
+                                            
                                             for (param_name, param_value) in &preset.values {
                                                 if &param_name[..] == "glide_mode" {
                                                     setter.begin_set_parameter(&params.glide_mode);
@@ -594,11 +601,12 @@ impl Plugin for RX11 {
                                                     }
                                                 }
                                             }
-                                        }
+                                            // How do I close the dropdown on button click?
+                                        } // End Preset Button Clicked
                                     }
                             })
                         }); // End MenuButton
-                        ui.label("RX11: I think this is where I'll put menu stuff.");
+                        ui.label(format!("Preset: {}", selected_preset));
                     })
                 });
                 egui::CentralPanel::default().show(egui_ctx, |ui| {
