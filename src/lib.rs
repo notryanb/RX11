@@ -467,7 +467,7 @@ impl Default for RX11Params {
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
                     max: util::db_to_gain(6.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 6.0),
+                    factor: FloatRange::gain_skew_factor(util::db_to_gain(-30.0), util::db_to_gain(6.0)),
                 },
             )
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
@@ -543,7 +543,7 @@ impl Plugin for RX11 {
                         ui.menu_button("Presets", |ui| {
                             egui::ScrollArea::vertical()
                                 .scroll_bar_visibility(
-                                    egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible,
+                                    egui::containers::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
                                 )
                                 .show(ui, |ui| {
                                     for preset in &presets.0 {
@@ -965,6 +965,7 @@ impl Plugin for RX11 {
             // Convert range from -1.5..6.5
             self.synth.filter_key_tracking = 0.08 * self.params.filter_freq.value() - 1.5;
 
+            // Filter Q starts at 1 and goes up to ~20.
             let filter_resonance = self.params.filter_reso.value() / 100.0;
             self.synth.filter_resonance = (3.0 * filter_resonance).exp();
 

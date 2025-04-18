@@ -188,8 +188,6 @@ impl Synth {
         voice_idx
     }
 
-    // TODO - I'm subtracting 64 from velocity, which I believe is already 0..1. Discover how
-    // this parameter might have to be changed
     pub fn start_voice(&mut self, voice_idx: usize, note: i32, velocity: f32) {
         let period = self.calculate_period(voice_idx, note);
         let is_playing_legato_style = self.is_playing_legato_style();
@@ -210,6 +208,8 @@ impl Synth {
         // dividing by PI was part of the original JX11 and makes the cutoff about 3x lower than the played note
         voice.cutoff_freq = self.sample_rate / (period * std::f32::consts::PI);
 
+        // Velocity starts as 0..1 in NIH_PLUG, however I'm multiplying it by 127 to keep the range the same
+        // as the JUCE synth book.
         if velocity > 0.0 {
             voice.cutoff_freq *= (self.velocity_sensitivity * (velocity - 64.0)).exp();
         }
@@ -227,10 +227,11 @@ impl Synth {
         // Adjust velocity to be non-linear - somewhat parabolic
         let velocity = 0.004 * (velocity + 64.0) * (velocity + 64.0) - 8.0;
         voice.oscillator_1.amplitude = velocity * self.volume_trim;
-        voice.oscillator_1.reset();
-
         voice.oscillator_2.amplitude = voice.oscillator_1.amplitude * self.osc_mix;
-        voice.oscillator_2.reset();
+
+        // OPTIONAL
+        // voice.oscillator_1.reset();
+        // voice.oscillator_2.reset();
 
         if self.vibrato == 0.0 && self.pwm_depth > 0.0 {
             voice
