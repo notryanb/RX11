@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 # The `lib` artifact is needed for the standalone target
-name = "rx11_lib"
+#name = "rx11_lib"
 crate-type = ["cdylib", "lib"]
 
 [workspace]
