@@ -5,7 +5,6 @@ edition = "2021"
 
 [lib]
 # The `lib` artifact is needed for the standalone target
-#name = "rx11_lib"
 crate-type = ["cdylib", "lib"]
 
 [workspace]
@@ -15,4 +14,6 @@ members = ["xtask"]
 parking_lot = "0.12"
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "standalone"] }
 nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+tracing = { version = "0.1.40", default-features = false }
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["registry"] }
 
