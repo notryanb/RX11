@@ -3,10 +3,13 @@ use nih_plug::midi::control_change::{
 };
 use nih_plug::prelude::*;
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
+use tracing_subscriber::prelude::*;
 
+use std::any::Any;
 use std::sync::Arc;
 
 mod envelope;
+mod logger;
 mod noise_generator;
 mod oscillator;
 mod presets;
@@ -16,6 +19,7 @@ mod voice;
 
 use crate::presets::Presets;
 use crate::synth::Synth;
+use crate::logger::EventCollector;
 
 const MAX_BLOCK_SIZE: usize = 64;
 
@@ -79,15 +83,22 @@ pub struct RX11 {
     synth: Synth,
     presets: Presets,
     selected_preset: String,
+    logs: EventCollector,
 }
 
 impl Default for RX11 {
     fn default() -> Self {
+        let collector = EventCollector::new();
+        tracing_subscriber::registry()
+            .with(collector.clone())
+            .init();
+        
         Self {
             params: Arc::new(RX11Params::default()),
             synth: Synth::new(),
             presets: Presets::init(),
             selected_preset: "Init".into(),
+            logs: collector,
         }
     }
 }
@@ -529,6 +540,7 @@ impl Plugin for RX11 {
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         let params = self.params.clone();
         let presets = self.presets.clone();
+        let logger = self.logs.clone();
 
         create_egui_editor(
             self.params.editor_state.clone(),
@@ -536,6 +548,17 @@ impl Plugin for RX11 {
             |_, _| {},
             move |egui_ctx, setter, state| {
                 let selected_preset = state;
+
+                egui::Window::new("Logs").min_width(600.0).min_height(800.0).show(egui_ctx, |ui| {
+                    ui.label("Logs go under here");
+                    ui.separator();
+                    
+                    for evt in logger.events().iter() {
+                        if let Some(field) = evt.fields.first_key_value() {
+                            ui.label(field.1);
+                        }
+                    }
+                });
                 
                 egui::TopBottomPanel::top("menu").show(egui_ctx, |ui| {
                     ui.horizontal(|ui| {
@@ -548,6 +571,8 @@ impl Plugin for RX11 {
                                 .show(ui, |ui| {
                                     for preset in &presets.0 {
                                         if ui.button(&preset.name).clicked() {
+                                            tracing::info!("Preset {} Clicked", &preset.name);
+                                            
                                             *selected_preset = preset.name.clone();
                                             
                                             for (param_name, param_value) in &preset.values {
@@ -820,6 +845,7 @@ impl Plugin for RX11 {
                                 note, // values are 0..128, maybe I can store as i8 instead of i32?
                                 velocity, // values are normalized 0..1, multiply by 127 to get back to original range
                             } => {
+                                tracing::info!("note on event");
                                 self.synth.note_on(note.into(), velocity * 127.0);
                             }
                             NoteEvent::NoteOff {
@@ -829,6 +855,7 @@ impl Plugin for RX11 {
                                 note,
                                 velocity: _,
                             } => {
+                                tracing::info!("note off event");
                                 self.synth.note_off(note.into());
                             }
                             NoteEvent::MidiPitchBend {
