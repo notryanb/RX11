@@ -3,6 +3,10 @@ name = "rx11"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "rx11_standalone"
+path = "src/main.rs"
+
 [lib]
 # The `lib` artifact is needed for the standalone target
 crate-type = ["cdylib", "lib"]
