@@ -5,7 +5,6 @@ use nih_plug::prelude::*;
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 use tracing_subscriber::prelude::*;
 
-use std::any::Any;
 use std::sync::Arc;
 
 mod envelope;
@@ -17,7 +16,7 @@ mod state_variable_filter;
 mod synth;
 mod voice;
 
-use crate::presets::Presets;
+use crate::presets::{Preset, Presets};
 use crate::synth::Synth;
 use crate::logger::EventCollector;
 
@@ -78,11 +77,17 @@ impl GlideMode {
     }
 }
 
+#[derive(Clone)]
+pub struct UiState {
+    pub selected_preset: String,
+    pub loaded_preset_on_startup: bool,
+}
+
 pub struct RX11 {
     params: Arc<RX11Params>,
     synth: Synth,
     presets: Presets,
-    selected_preset: String,
+    ui_state: UiState,
     logs: EventCollector,
 }
 
@@ -97,7 +102,7 @@ impl Default for RX11 {
             params: Arc::new(RX11Params::default()),
             synth: Synth::new(),
             presets: Presets::init(),
-            selected_preset: "Init".into(),
+            ui_state: UiState { selected_preset: "Init".into(), loaded_preset_on_startup: false },
             logs: collector,
         }
     }
@@ -232,7 +237,7 @@ impl Default for RX11Params {
             .with_unit("cent")
             .with_value_to_string(formatters::v2s_f32_rounded(2)),
 
-            poly_mode: EnumParam::new("Poly Mode", PolyMode::Mono),
+            poly_mode: EnumParam::new("Poly Mode", PolyMode::Poly),
 
             glide_mode: EnumParam::new("Glide Mode", GlideMode::Off),
 
@@ -500,6 +505,60 @@ impl Default for RX11Params {
     }
 }
 
+pub fn load_preset(preset: &Preset, setter: &ParamSetter, params: &RX11Params) {
+    for (param_name, param_value) in &preset.values {
+        if &param_name[..] == "glide_mode" {
+            setter.begin_set_parameter(&params.glide_mode);
+            setter.set_parameter(
+                &params.glide_mode,
+                GlideMode::from_f32(*param_value),
+            );
+            setter.end_set_parameter(&params.glide_mode);
+        } else if &param_name[..] == "poly_mode" {
+            setter.begin_set_parameter(&params.poly_mode);
+            setter.set_parameter(
+                &params.poly_mode,
+                PolyMode::from_f32(*param_value),
+            );
+            setter.end_set_parameter(&params.poly_mode);
+        } else {
+            let param = match &param_name[..] {
+                "osc_mix" => Some(&params.osc_mix),
+                "osc_tune" => Some(&params.osc_tune),
+                "osc_fine_tune" => Some(&params.osc_fine_tune),
+                "glide_rate" => Some(&params.glide_rate),
+                "glide_bend" => Some(&params.glide_bend),
+                "filter_freq" => Some(&params.filter_freq),
+                "filter_reso" => Some(&params.filter_reso),
+                "filter_env" => Some(&params.filter_env),
+                "filter_lfo" => Some(&params.filter_lfo),
+                "filter_velocity" => Some(&params.filter_velocity),
+                "filter_attack" => Some(&params.filter_attack),
+                "filter_decay" => Some(&params.filter_decay),
+                "filter_sustain" => Some(&params.filter_sustain),
+                "filter_release" => Some(&params.filter_release),
+                "env_attack" => Some(&params.env_attack),
+                "env_decay" => Some(&params.env_decay),
+                "env_sustain" => Some(&params.env_sustain),
+                "env_release" => Some(&params.env_release),
+                "lfo_rate" => Some(&params.lfo_rate),
+                "vibrato" => Some(&params.vibrato),
+                "noise" => Some(&params.noise_level),
+                "octave" => Some(&params.octave),
+                "tuning" => Some(&params.tuning),
+                "output" => Some(&params.output_level),
+                _ => None,
+            };
+
+            if let Some(param) = param {
+                setter.begin_set_parameter(param);
+                setter.set_parameter(param, *param_value);
+                setter.end_set_parameter(param);
+            }
+        }
+    }
+}
+
 impl Plugin for RX11 {
     const NAME: &'static str = "RX11 Synth";
     const VENDOR: &'static str = "RyanSoft";
@@ -534,8 +593,10 @@ impl Plugin for RX11 {
     }
 
     fn reset(&mut self) {
+        tracing::debug!("plugin reset called");
         self.synth.reset(&self.params);
     }
+
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         let params = self.params.clone();
@@ -544,20 +605,33 @@ impl Plugin for RX11 {
 
         create_egui_editor(
             self.params.editor_state.clone(),
-            self.selected_preset.clone(),
+            self.ui_state.clone(),
             |_, _| {},
             move |egui_ctx, setter, state| {
-                let selected_preset = state;
+                let UiState { selected_preset, loaded_preset_on_startup } = state;
 
-                egui::Window::new("Logs").min_width(600.0).min_height(800.0).show(egui_ctx, |ui| {
+                if !*loaded_preset_on_startup {
+                    if let Some(preset) = presets.0.first() {
+                        load_preset(&preset, &setter, &params);
+                        *loaded_preset_on_startup = true;
+                    } else {
+                        tracing::debug!("There was no preset to load on startup");
+                    }
+                }
+
+                egui::Window::new("Logs").min_width(400.0).show(egui_ctx, |ui| {
                     ui.label("Logs go under here");
                     ui.separator();
                     
-                    for evt in logger.events().iter() {
-                        if let Some(field) = evt.fields.first_key_value() {
-                            ui.label(field.1);
-                        }
-                    }
+                    egui::ScrollArea::vertical()
+                        .scroll_bar_visibility(egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                        .show(ui, |ui| {
+                            for evt in logger.events().iter() {
+                                if let Some(field) = evt.fields.first_key_value() {
+                                    ui.label(field.1);
+                                }
+                            }
+                        });
                 });
                 
                 egui::TopBottomPanel::top("menu").show(egui_ctx, |ui| {
@@ -571,66 +645,13 @@ impl Plugin for RX11 {
                                 .show(ui, |ui| {
                                     for preset in &presets.0 {
                                         if ui.button(&preset.name).clicked() {
-                                            tracing::info!("Preset {} Clicked", &preset.name);
-                                            
                                             *selected_preset = preset.name.clone();
-                                            
-                                            for (param_name, param_value) in &preset.values {
-                                                if &param_name[..] == "glide_mode" {
-                                                    setter.begin_set_parameter(&params.glide_mode);
-                                                    setter.set_parameter(
-                                                        &params.glide_mode,
-                                                        GlideMode::from_f32(*param_value),
-                                                    );
-                                                    setter.end_set_parameter(&params.glide_mode);
-                                                } else if &param_name[..] == "poly_mode" {
-                                                    setter.begin_set_parameter(&params.poly_mode);
-                                                    setter.set_parameter(
-                                                        &params.poly_mode,
-                                                        PolyMode::from_f32(*param_value),
-                                                    );
-                                                    setter.end_set_parameter(&params.poly_mode);
-                                                } else {
-                                                    let param = match &param_name[..] {
-                                                        "osc_mix" => Some(&params.osc_mix),
-                                                        "osc_tune" => Some(&params.osc_tune),
-                                                        "osc_fine_tune" => Some(&params.osc_fine_tune),
-                                                        "glide_rate" => Some(&params.glide_rate),
-                                                        "glide_bend" => Some(&params.glide_bend),
-                                                        "filter_freq" => Some(&params.filter_freq),
-                                                        "filter_reso" => Some(&params.filter_reso),
-                                                        "filter_env" => Some(&params.filter_env),
-                                                        "filter_lfo" => Some(&params.filter_lfo),
-                                                        "filter_velocity" => Some(&params.filter_velocity),
-                                                        "filter_attack" => Some(&params.filter_attack),
-                                                        "filter_decay" => Some(&params.filter_decay),
-                                                        "filter_sustain" => Some(&params.filter_sustain),
-                                                        "filter_release" => Some(&params.filter_release),
-                                                        "env_attack" => Some(&params.env_attack),
-                                                        "env_decay" => Some(&params.env_decay),
-                                                        "env_sustain" => Some(&params.env_sustain),
-                                                        "env_release" => Some(&params.env_release),
-                                                        "lfo_rate" => Some(&params.lfo_rate),
-                                                        "vibrato" => Some(&params.vibrato),
-                                                        "noise" => Some(&params.noise_level),
-                                                        "octave" => Some(&params.octave),
-                                                        "tuning" => Some(&params.tuning),
-                                                        "output" => Some(&params.output_level),
-                                                        _ => None,
-                                                    };
-
-                                                    if let Some(param) = param {
-                                                        setter.begin_set_parameter(param);
-                                                        setter.set_parameter(param, *param_value);
-                                                        setter.end_set_parameter(param);
-                                                    }
-                                                }
-                                            }
+                                            load_preset(&preset, &setter, &params);
                                             // How do I close the dropdown on button click?
-                                        } // End Preset Button Clicked
+                                        }
                                     }
-                            })
-                        }); // End MenuButton
+                                })
+                        });
                         ui.label(format!("Preset: {}", selected_preset));
                     })
                 });
@@ -845,7 +866,6 @@ impl Plugin for RX11 {
                                 note, // values are 0..128, maybe I can store as i8 instead of i32?
                                 velocity, // values are normalized 0..1, multiply by 127 to get back to original range
                             } => {
-                                tracing::info!("note on event");
                                 self.synth.note_on(note.into(), velocity * 127.0);
                             }
                             NoteEvent::NoteOff {
@@ -855,7 +875,6 @@ impl Plugin for RX11 {
                                 note,
                                 velocity: _,
                             } => {
-                                tracing::info!("note off event");
                                 self.synth.note_off(note.into());
                             }
                             NoteEvent::MidiPitchBend {

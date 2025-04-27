@@ -93,6 +93,8 @@ impl Synth {
     }
 
     pub fn reset(&mut self, params: &RX11Params) {
+        tracing::debug!("Synth Reset Called");
+
         for voice in &mut self.voices {
             voice.reset();
         }
