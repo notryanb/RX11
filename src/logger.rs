@@ -11,7 +11,7 @@ use tracing_subscriber::Layer;
 
 #[derive(Debug, Clone)]
 pub struct CollectedEvent {
-    pub target: String,
+    //pub target: String,
     pub level: tracing::Level,
     pub fields: BTreeMap<String, String>,
 }
@@ -23,7 +23,7 @@ impl CollectedEvent {
 
         Self {
             level: meta.level().to_owned(),
-            target: meta.target().to_owned(),
+            //target: meta.target().to_owned(),
             fields,
         }
     }
@@ -41,7 +41,7 @@ impl<'a> Visit for FieldVisitor<'a> {
 #[derive(Debug, Clone)]
 pub enum AllowedTargets {
     All,
-    Selected(Vec<String>),
+    //Selected(Vec<String>),
 }
 
 #[derive(Debug, Clone)]
@@ -56,6 +56,7 @@ impl EventCollector {
         Self::default()
     }
 
+    /*
     pub fn with_level(self, level: Level) -> Self {
         Self { level, ..self }
     }
@@ -66,6 +67,7 @@ impl EventCollector {
             ..self
         }
     }
+    */
 
     pub fn events(&self) -> Vec<CollectedEvent> {
         self.events.lock().unwrap().clone()
@@ -80,9 +82,11 @@ impl EventCollector {
         if event.level <= self.level {
             let should_collect = match self.allowed_targets {
                 AllowedTargets::All => true,
+                /*
                 AllowedTargets::Selected(ref selection) => selection
                     .iter()
                     .any(|target| event.target.starts_with(target)),
+                */
             };
 
             if should_collect {
