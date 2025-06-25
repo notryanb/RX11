@@ -14,6 +14,7 @@ mod oscillator;
 mod presets;
 mod state_variable_filter;
 mod synth;
+mod rotary_slider;
 mod ui;
 mod voice;
 

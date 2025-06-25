@@ -2,7 +2,8 @@ use nih_plug::context::gui::ParamSetter;
 use nih_plug_egui::{egui, widgets};
 use nih_plug_egui::{resizable_window::ResizableWindow};
 use nih_plug_egui::EguiState;
-use crate::egui::{Context, Vec2};
+use crate::egui::{Context, Vec2, vec2};
+use crate::rotary_slider::RotarySlider;
 use std::sync::Arc;
 
 use crate::{EventCollector, GlideMode, PolyMode, Preset, Presets, RX11Params, UiState};
@@ -31,7 +32,7 @@ pub fn rx11_egui_ui(
 
     ResizableWindow::new("res-wind")
         .min_size(Vec2::new(800.0, 600.0))
-        .show(egui_ctx, egui_state.as_ref(), |ui| { 
+        .show(egui_ctx, egui_state.as_ref(), |_ui| { 
 
             // Load something that makes sound because the synth is initialized
             // without taking presets into consideration. This will also be a good
@@ -116,6 +117,20 @@ fn synth_view(
     params: &RX11Params
 ) {
     egui::CentralPanel::default().show(egui_ctx, |ui| {
+        // TODO - set dragged event on slider to test for changes
+        let mut my_f32 = 42f32;
+        let knob = ui.add(RotarySlider::new(&mut my_f32, 0.0..=100.0).text("Volume"));
+        if knob.dragged() {
+            tracing::info!("Dragging...");
+        }
+
+        if knob.clicked() {
+            tracing::info!("clicked...");
+        }
+
+
+        ui.separator();
+        
         egui::ScrollArea::vertical()
             .scroll_bar_visibility(
                 egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible,
