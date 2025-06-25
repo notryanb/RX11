@@ -275,19 +275,13 @@ impl<'a> RotarySlider<'a> {
 
 impl RotarySlider<'_> {
     fn allocate_slider_space(&self, ui: &mut Ui, thickness: f32) -> Response {
-        // let desired_size = vec2(ui.spacing().slider_width, thickness);
-        let desired_size = vec2(128.0, 128.0);
+        // TODO - the size should probably be configurable
+        let desired_size = vec2(64.0, 64.0);
         ui.allocate_response(desired_size, Sense::drag())
     }
 
     fn pointer_position(&self, pointer_position_2d: Pos2) -> f32 {
         pointer_position_2d.y
-        /*
-        match self.orientation {
-            SliderOrientation::Horizontal => pointer_position_2d.x,
-            SliderOrientation::Vertical => pointer_position_2d.y,
-        }
-        */
     }
 
     fn slider_ui(&mut self, ui: &mut Ui, response: &Response) {
@@ -375,7 +369,7 @@ impl RotarySlider<'_> {
             let widget_visuals = &ui.visuals().widgets;
             let spacing = &ui.style().spacing;
             let corner_radius = widget_visuals.inactive.corner_radius;
-            let radius = 50.0;
+            let radius = 25.0;
             let stroke = Stroke {
                 width: 1.0, color: Color32::CYAN,
             };
@@ -564,16 +558,8 @@ impl RotarySlider<'_> {
             style::HandleShape::Rect { aspect_ratio } => handle_radius * aspect_ratio,
         };
 
-        /*
-        match self.orientation {
-            SliderOrientation::Horizontal => rect.x_range().shrink(handle_radius),
-
-            // The vertical case has to be flipped because the largest slider value maps to the
-            // lowest y value (which is at the top)
-            SliderOrientation::Vertical => rect.y_range().shrink(handle_radius).flip(),
-        }
-        */
-
+        // The vertical case has to be flipped because the largest slider value maps to the
+        // lowest y value (which is at the top)
         rect.y_range().shrink(handle_radius).flip()
     }
 
