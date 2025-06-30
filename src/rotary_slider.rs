@@ -51,6 +51,7 @@ pub struct RotarySlider<'a> {
     spec: RotarySliderSpec,
     clamping: SliderClamping,
     show_value: bool,
+    size: f32,
     prefix: String,
     suffix: String,
     text: WidgetText,
@@ -99,6 +100,7 @@ impl<'a> RotarySlider<'a> {
             suffix: Default::default(),
             text: Default::default(),
             step: None,
+            size: 50.0,
             drag_value_speed: None,
             min_decimals: 0,
             max_decimals: None,
@@ -136,6 +138,12 @@ impl<'a> RotarySlider<'a> {
     #[inline]
     pub fn text_color(mut self, text_color: Color32) -> Self {
         self.text = self.text.color(text_color);
+        self
+    }
+
+    #[inline]
+    pub fn size(mut self, size: f32) -> Self {
+        self.size = size;
         self
     }
 
@@ -276,7 +284,7 @@ impl<'a> RotarySlider<'a> {
 impl RotarySlider<'_> {
     fn allocate_slider_space(&self, ui: &mut Ui, thickness: f32) -> Response {
         // TODO - the size should probably be configurable
-        let desired_size = vec2(64.0, 64.0);
+        let desired_size = vec2(self.size, self.size);
         ui.allocate_response(desired_size, Sense::drag())
     }
 
@@ -369,14 +377,10 @@ impl RotarySlider<'_> {
             let widget_visuals = &ui.visuals().widgets;
             let spacing = &ui.style().spacing;
             let corner_radius = widget_visuals.inactive.corner_radius;
-            let radius = 25.0;
-            let stroke = Stroke {
-                width: 1.0, color: Color32::CYAN,
-            };
+            let radius = self.size * 0.5;
 
             ui.painter()
-                // .rect_filled(dial_rect, corner_radius, widget_visuals.inactive.bg_fill);
-                .rect_stroke(*rect, corner_radius, stroke, StrokeKind::Outside);
+                .rect_filled(*rect, corner_radius, Color32::TRANSPARENT);
 
             let center = response.rect.center();
 

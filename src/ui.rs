@@ -300,19 +300,16 @@ fn synth_view(
                 let mut volume_val = *raw_volume_val;
                 // TODO - I should probably have a custom function to display as dB
                 if ui
-                    .add(RotarySlider::new(&mut volume_val, 0.0..=1.0).text("Volume"))
+                    .add(RotarySlider::new(&mut volume_val, 0.0..=1.0)
+                        .text("Volume")
+                        .size(75.0)
+                    )
                     .dragged()
                 {
                     setter.begin_set_parameter(&params.output_level);
                     setter.set_parameter(&params.output_level, volume_val);
                     setter.end_set_parameter(&params.output_level);
                 }
-
-                // ui.label("volume");
-                // ui.add(widgets::paramslider::for_param(
-                //     &params.output_level,
-                //     setter,
-                // ));
             })
     });// END CENTRAL PANEL
 }
