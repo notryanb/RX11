@@ -1,7 +1,7 @@
 use crate::egui::{
-    Color32, DragValue, emath, pos2, Label, lerp, Key,
+    Align2, Color32, DragValue, emath, pos2, Label, lerp, Key,
     Painter, Pos2, Rangef, Rect, Response, remap, remap_clamp,
-    Sense, Shape, Stroke, StrokeKind, style, TextStyle, TextWrapMode,
+    Sense, Shape, Slider, Stroke, StrokeKind, style, TextStyle, TextWrapMode,
     Widget, WidgetInfo, WidgetText, 
     Ui, Vec2, vec2
 };
@@ -309,8 +309,8 @@ impl RotarySlider<'_> {
             self.set_value(new_value);
         }
 
-        let mut decrement = 0usize;
-        let mut increment = 0usize;
+        let decrement = 0usize;
+        let increment = 0usize;
 
         /*
         if response.has_focus() {
@@ -364,7 +364,7 @@ impl RotarySlider<'_> {
         }
 
         if ui.is_rect_visible(response.rect) { 
-            let val = self.get_value() / 100.0;// TODO: This should be the max range
+            let val = self.get_value() / self.range.end();
             let visuals = ui.style().interact(response);
             let widget_visuals = &ui.visuals().widgets;
             let spacing = &ui.style().spacing;
@@ -381,8 +381,8 @@ impl RotarySlider<'_> {
             let center = response.rect.center();
 
             // Rotates counter clockwise
-            let mut start_angle = PI * 2.25;
-            let mut end_angle = PI * 0.75;
+            let start_angle = PI * 2.25;
+            let end_angle = PI * 0.75;
 
             let _ = &self.draw_arc(
                 &ui.painter(),
@@ -539,6 +539,8 @@ impl RotarySlider<'_> {
         response
     }
 
+    // TODO: I can probably delete
+    // This is for the little knob on the slider
     fn handle_radius(&self, rect: &Rect) -> f32 {
         /*
         let limit = match self.orientation {
@@ -762,7 +764,3 @@ fn logarithmic_zero_cutoff(min: f64, max: f64) -> f64 {
 
     cutoff
 }
-
-
-
-

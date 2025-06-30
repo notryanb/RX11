@@ -2,7 +2,7 @@ use nih_plug::context::gui::ParamSetter;
 use nih_plug_egui::{egui, widgets};
 use nih_plug_egui::{resizable_window::ResizableWindow};
 use nih_plug_egui::EguiState;
-use crate::egui::{Context, Vec2, vec2};
+use crate::egui::{Context, Slider, Vec2, vec2};
 use crate::rotary_slider::RotarySlider;
 use std::sync::Arc;
 
@@ -118,16 +118,20 @@ fn synth_view(
 ) {
     egui::CentralPanel::default().show(egui_ctx, |ui| {
         // TODO - set dragged event on slider to test for changes
-        let mut my_f32 = 42f32;
-        let knob = ui.add(RotarySlider::new(&mut my_f32, 0.0..=100.0).text("Volume"));
-        if knob.dragged() {
-            tracing::info!("Dragging...");
-        }
+        // let mut my_value = 42f32;
+        // let knob = ui.add(RotarySlider::new(&mut my_value, 0.0..=100.0).text("Volume"));
+        // if knob.dragged() {
+        //     tracing::info!("Dragging...");
+        // }
 
-        if knob.clicked() {
-            tracing::info!("clicked...");
-        }
+        // if knob.clicked() {
+        //     tracing::info!("clicked...");
+        // }
 
+        // custom_slider_ui(ui, &mut my_value, 0.0..=100.0);
+
+        // let slider = Slider::new(&mut my_f32, 0.0..=100.0).text("Custom Slider");
+        // ui.add(MyCustomSlider { slider });
 
         ui.separator();
         
@@ -292,11 +296,23 @@ fn synth_view(
                 ui.label("Tuning");
                 ui.add(widgets::ParamSlider::for_param(&params.tuning, setter));
 
-                ui.label("Volume");
-                ui.add(widgets::ParamSlider::for_param(
-                    &params.output_level,
-                    setter,
-                ));
+                let raw_volume_val = &params.output_level.value();
+                let mut volume_val = *raw_volume_val;
+                // TODO - I should probably have a custom function to display as dB
+                if ui
+                    .add(RotarySlider::new(&mut volume_val, 0.0..=1.0).text("Volume"))
+                    .dragged()
+                {
+                    setter.begin_set_parameter(&params.output_level);
+                    setter.set_parameter(&params.output_level, volume_val);
+                    setter.end_set_parameter(&params.output_level);
+                }
+
+                // ui.label("volume");
+                // ui.add(widgets::paramslider::for_param(
+                //     &params.output_level,
+                //     setter,
+                // ));
             })
     });// END CENTRAL PANEL
 }
