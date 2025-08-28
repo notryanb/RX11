@@ -2,8 +2,8 @@ use nih_plug::context::gui::ParamSetter;
 use nih_plug_egui::{egui, widgets};
 use nih_plug_egui::{resizable_window::ResizableWindow};
 use nih_plug_egui::EguiState;
-use crate::egui::{Context, Vec2, vec2};
-use crate::rotary_slider::RotarySlider;
+use crate::egui::{Context, Vec2};
+use crate::rotary_slider::{Knob, KnobStyle, LabelPosition};
 use std::sync::Arc;
 
 use crate::{EventCollector, GlideMode, PolyMode, Preset, Presets, RX11Params, UiState};
@@ -117,17 +117,22 @@ fn synth_view(
     params: &RX11Params
 ) {
     egui::CentralPanel::default().show(egui_ctx, |ui| {
-        // TODO - set dragged event on slider to test for changes
-        let mut my_f32 = 42f32;
-        let knob = ui.add(RotarySlider::new(&mut my_f32, 0.0..=100.0).text("Volume"));
-        if knob.dragged() {
-            tracing::info!("Dragging...");
+        // TODO:
+        // I don't want to have to copy the value and then do all the setter stuff.
+        // This should be made into a nih_plug style widget like the other sliders
+        // Also, setting the min/max range on both the Param and here is not ideal.
+        let vol_raw = &params.output_level.value();
+        let mut vol_raw2 = vol_raw.clone(); // 
+        let vol_min = nih_plug::util::db_to_gain(-30.0);
+        let vol_max = nih_plug::util::db_to_gain(6.0);
+        if ui.add(
+                Knob::new(&mut vol_raw2, vol_min, vol_max, KnobStyle::Wiper)
+                    .with_label("Volume", LabelPosition::Bottom)
+            ).dragged() {
+            setter.begin_set_parameter(&params.output_level);
+            setter.set_parameter(&params.output_level, vol_raw2);
+            setter.end_set_parameter(&params.output_level);
         }
-
-        if knob.clicked() {
-            tracing::info!("clicked...");
-        }
-
 
         ui.separator();
         
@@ -292,11 +297,11 @@ fn synth_view(
                 ui.label("Tuning");
                 ui.add(widgets::ParamSlider::for_param(&params.tuning, setter));
 
-                ui.label("Volume");
-                ui.add(widgets::ParamSlider::for_param(
-                    &params.output_level,
-                    setter,
-                ));
+                // ui.label("Volume");
+                // ui.add(widgets::ParamSlider::for_param(
+                //     &params.output_level,
+                //     setter,
+                // ));
             })
     });// END CENTRAL PANEL
 }

@@ -1,25 +1,258 @@
-use crate::egui::{
-    Color32, DragValue, emath, pos2, Label, lerp, Key,
-    Painter, Pos2, Rangef, Rect, Response, remap, remap_clamp,
-    Sense, Shape, Stroke, StrokeKind, style, TextStyle, TextWrapMode,
-    Widget, WidgetInfo, WidgetText, 
-    Ui, Vec2, vec2
+// This is copied from the SFLT plugin source code.
+// https://estrobiologist.gumroad.com/l/sflt
+// SFLT source code copied it from
+// https://github.com/obsqrbtz/egui_knob
+// Both are excellent. I will be trying to customize additional behavior and just needed something for now.
+// SFLT does windows specific stuff to hide the mouse and return it to the starting cursor position.
+// I want to figure this out for cross platform or at least hide it behind build targets so I can still use
+// this plugin on multiple platforms
+
+#![allow(clippy::needless_pass_by_value)] // false positives with `impl ToString`
+#![allow(dead_code)]
+
+use crate::egui::{Align2, Color32, Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
+use crate::egui:: {
+    emath, Button, FontId, NumExt, RichText,
+    TextWrapMode, WidgetInfo,
 };
-use crate::egui::style::HandleShape;
-use crate::egui::NumExt;
 
-use std::f32::consts::{PI};
+use std::{cmp::Ordering, ops::RangeInclusive};
 
-const INFINITY: f64 = f64::INFINITY;
+pub enum LabelPosition {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
 
-/// When the user asks for an infinitely large range (e.g. logarithmic from zero),
-/// give a scale that this many orders of magnitude in size.
-const INF_RANGE_MAGNITUDE: f64 = 10.0;
 
-use std::ops::RangeInclusive;
+pub enum KnobStyle {
+    Wiper,
+    Dot,
+}
+
+pub struct Knob<'a> {
+    value: &'a mut f32,
+    min: f32,
+    max: f32,
+    size: f32,
+    font_size: f32,
+    stroke_width: f32,
+    knob_color: Color32,
+    line_color: Color32,
+    text_color: Color32,
+    label: Option<String>,
+    label_position: LabelPosition,
+    style: KnobStyle,
+    label_offset: f32,
+    step: Option<f32>,
+    delta_offset: f32,
+}
+
+impl<'a> Knob<'a> {
+    pub fn new(value: &'a mut f32, min: f32, max: f32, style: KnobStyle) -> Self{
+        Self {
+            value,
+            min,
+            max,
+            size: 40.0,
+            font_size: 12.0,
+            stroke_width: 2.0,
+            knob_color: Color32::GRAY,
+            line_color: Color32::GRAY,
+            text_color: Color32::WHITE,
+            label: None,
+            label_position: LabelPosition::Bottom,
+            style,
+            label_offset: 1.0,
+            step: None,
+            delta_offset: 0.0,
+        }
+    }
+
+    pub fn with_delta_offset(mut self, delta_offset: f32) -> Self {
+        self.delta_offset = delta_offset;
+        self
+    }
+
+    pub fn with_size(mut self, size: f32) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn with_font_size(mut self, size: f32) -> Self {
+        self.font_size = size;
+        self
+    }
+
+    pub fn with_stroke_width(mut self, width: f32) -> Self {
+        self.stroke_width = width;
+        self
+    }
+
+    pub fn with_colors(mut self, knob_color: Color32, line_color: Color32, text_color: Color32) -> Self {
+        self.knob_color = knob_color;
+        self.line_color = line_color;
+        self.text_color = text_color;
+        self
+    }
+
+    pub fn with_label(mut self, label: impl Into<String>, position: LabelPosition) -> Self {
+        self.label = Some(label.into());
+        self.label_position = position;
+        self
+    }
+
+    pub fn with_label_offset(mut self, offset: f32) -> Self {
+        self.label_offset = offset;
+        self
+    }
+
+    pub fn with_step(mut self, step: f32) -> Self {
+        self.step = Some(step);
+        self
+    }
+}
+
+
+impl Widget for Knob<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let knob_size = Vec2::splat(self.size);
+
+        let label_size = if let Some(label) = &self.label {
+            let font_id = FontId::proportional(self.font_size);
+            let max_text = label.clone();
+            ui.painter()
+                .layout(max_text, font_id, Color32::WHITE, f32::INFINITY)
+                .size()
+        } else {
+            Vec2::ZERO
+        };
+
+        let label_padding = 2.0;
+
+        let adjusted_size = match self.label_position {
+            LabelPosition::Top | LabelPosition::Bottom => Vec2::new(
+                knob_size.x.max(label_size.x + label_padding * 2.0),
+                knob_size.y + label_size.y + label_padding * 2.0 + self.label_offset,
+            ),
+            LabelPosition::Left | LabelPosition::Right => Vec2::new(
+                  knob_size.x + label_size.x + label_padding * 2.0 + self.label_offset,
+                  knob_size.y.max(label_size.y + label_padding * 2.0)      
+            ),
+        };
+
+        let left_down = ui.input(|state| state.pointer.primary_down());
+        let sense = if left_down { Sense::drag() } else { Sense::click_and_drag() };
+
+        let (rect, mut response) = ui.allocate_exact_size(adjusted_size, sense);
+
+        // Modify State of knob on drag
+        if response.dragged() {
+            let modifier = if ui.input(|i| i.modifiers.command_only()) { 0.1 } else { 1.0 };
+            let delta = response.drag_delta().y + self.delta_offset;
+            let range = self.max - self.min;
+            let step = self.step.unwrap_or(range * 0.005) * modifier;
+            let new_value = (*self.value - delta * step).clamp(self.min, self.max);
+
+            *self.value = if let Some(step) = self.step {
+                let steps = ((new_value - self.min) / step).round();
+                (self.min + steps * step).clamp(self.min, self.max)
+            } else {
+                new_value
+            };
+
+            response.mark_changed();
+        }
+
+        // Start drawing the knob
+        let painter = ui.painter();
+        let knob_rect = match self.label_position {
+            LabelPosition::Left => {
+                Rect::from_min_size(rect.right_top() + Vec2::new(-knob_size.x, 0.0), knob_size)
+            }
+            LabelPosition::Right => Rect::from_min_size(rect.left_top(), knob_size),
+            LabelPosition::Top => Rect::from_min_size(
+                rect.left_bottom() + Vec2::new((rect.width() - knob_size.x) / 2.0, -knob_size.y),
+                knob_size,      
+            ),
+            LabelPosition::Bottom => Rect::from_min_size(
+                rect.left_top() + Vec2::new((rect.width() - knob_size.x) / 2.0, 0.0),
+                knob_size,
+            ),
+        };
+
+        let center = knob_rect.center();
+        let radius = knob_size.x / 2.0;
+        let angle = (*self.value - self.min) / (self.max - self.min)
+            * std::f32::consts::PI * 1.5 - std::f32::consts::PI * 1.25;
+
+        let knob_color = if response.hovered() && !response.dragged() {
+            Color32::LIGHT_GRAY
+        } else {
+            Color32::GRAY
+        };
+
+        painter.circle_stroke(center, radius, Stroke::new(self.stroke_width, knob_color));
+
+        match self.style {
+            KnobStyle::Wiper => {
+                let pointer = center + Vec2::angled(angle) * (radius * 0.7);
+                painter.line_segment(
+                    [center, pointer],
+                    Stroke::new(self.stroke_width * 1.5, knob_color),
+                );
+            }
+            KnobStyle::Dot => {
+                let dot_pos = center + Vec2::angled(angle) * (radius * 0.7);
+                painter.circle_filled(dot_pos, self.stroke_width * 1.5, knob_color);
+            }
+        }
+
+        if let Some(label) = self.label {
+            let label_text = label.clone();
+            let font_id = FontId::proportional(self.font_size);
+
+            let (label_pos, alignment) = match self.label_position {
+                LabelPosition::Top => (
+                  Vec2::new(rect.center().x, rect.min.y - self.label_offset + label_padding),
+                  Align2::CENTER_TOP,
+                ),
+                LabelPosition::Bottom => (
+                  Vec2::new(rect.center().x, rect.max.y + self.label_offset),
+                  Align2::CENTER_BOTTOM,
+                ),
+                LabelPosition::Left => (
+                  Vec2::new(rect.min.x - self.label_offset, rect.center().y),
+                  Align2::LEFT_CENTER,
+                ),
+                LabelPosition::Right => (
+                  Vec2::new(rect.max.x + self.label_offset, rect.center().y),
+                  Align2::RIGHT_CENTER,
+                ),
+            };
+
+            ui.painter().text(
+                label_pos.to_pos2(),
+                alignment,
+                label_text,
+                font_id,
+                self.text_color,
+            );
+        }
+
+
+        // DEBUG: Draw the bounding rect
+        //painter.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::RED));
+
+        response
+    }
+}
+
+//////// Drag Value
 
 type NumFormatter<'a> = Box<dyn 'a + Fn(f64, RangeInclusive<usize>) -> String>;
-type NumParser<'a> = Box<dyn 'a + Fn(&str) -> Option<f64>>;
+type NumParser<'a> = Box<dyn 'a + Fn(&str) -> Option<&f64>>;
 type GetSetValue<'a> = Box<dyn 'a + FnMut(Option<f64>) -> f64>;
 
 fn get(get_set_value: &mut GetSetValue<'_>) -> f64 {
@@ -30,88 +263,65 @@ fn set(get_set_value: &mut GetSetValue<'_>, value: f64) {
     (get_set_value)(Some(value));
 }
 
-#[derive(Clone)]
-struct RotarySliderSpec {
-    logarithmic: bool,
-    smallest_positive: f64,
-    largest_finite: f64,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum SliderClamping {
-    Never,
-    Edits,
-    #[default]
-    Always,
-}
-
-pub struct RotarySlider<'a> {
+pub struct DragValue<'a> {
     get_set_value: GetSetValue<'a>,
-    range: RangeInclusive<f64>,
-    spec: RotarySliderSpec,
-    clamping: SliderClamping,
-    show_value: bool,
+    speed: f64,
     prefix: String,
     suffix: String,
-    text: WidgetText,
-    step: Option<f64>,
-    drag_value_speed: Option<f64>,
+    range: RangeInclusive<f64>,
+    clamp_existing_to_range: bool,
     min_decimals: usize,
     max_decimals: Option<usize>,
     custom_formatter: Option<NumFormatter<'a>>,
-    custom_parser: Option<NumParser<'a>>,
-    trailing_fill: Option<bool>,
-    handle_shape: Option<HandleShape>, // Not needed, this was for the handle (circle / rect) of a slider
+    delta_offset: f32,
 }
 
-impl<'a> RotarySlider<'a> {
-    pub fn new<Num: emath::Numeric>(value: &'a mut Num, range: RangeInclusive<Num>) -> Self {
-        let range_f64 = range.start().to_f64()..=range.end().to_f64();
-        let slf = Self::from_get_set(range_f64, move |v: Option<f64>| {
-           if let Some(v) = v {
-               *value = Num::from_f64(v);
-           }
-           value.to_f64()
+impl <'a> DragValue<'a> {
+    pub fn new<Num: emath::Numeric>(value: &'a mut Num) -> Self {
+        let slf = Self::from_get_set(move |v: Option<f64>| {
+            if let Some(v) = v {
+                *value = Num::from_f64(v);
+            }
+            value.to_f64()
         });
 
         if Num::INTEGRAL {
-            slf.integer()
+            slf.max_decimals(0).range(Num::MIN..=Num::MAX).speed(0.25)
         } else {
             slf
         }
     }
 
-    pub fn from_get_set(
-        range: RangeInclusive<f64>,
-        get_set_value: impl 'a + FnMut(Option<f64>) -> f64,
-    ) -> Self {
+    pub fn from_get_set(get_set_value: impl 'a + FnMut(Option<f64>) -> f64) -> Self {
         Self {
             get_set_value: Box::new(get_set_value),
-            range,
-            spec: RotarySliderSpec {
-                logarithmic: false,
-                smallest_positive: 1e-6,
-                largest_finite: f64::INFINITY,
-            },
-            clamping: SliderClamping::default(),
-            show_value: true,
+            speed: 1.0,
             prefix: Default::default(),
             suffix: Default::default(),
-            text: Default::default(),
-            step: None,
-            drag_value_speed: None,
+            range: f64::NEG_INFINITY..=f64::INFINITY,
+            clamp_existing_to_range: true,
             min_decimals: 0,
             max_decimals: None,
             custom_formatter: None,
-            custom_parser: None,
-            trailing_fill: None,
-            handle_shape: None,
+            delta_offset: 0.0
         }
     }
 
     #[inline]
-    pub fn show_value(mut self, show_value: bool) -> Self {
-        self.show_value = show_value;
+    pub fn speed(mut self, speed: impl Into<f64>) -> Self {
+        self.speed = speed.into();
+        self
+    }
+
+    #[inline]
+    pub fn range<Num: emath::Numeric>(mut self, range: RangeInclusive<Num>) -> Self {
+        self.range = range.start().to_f64()..=range.end().to_f64();
+        self
+    }
+
+    #[inline]
+    pub fn clamp_existing_to_range(mut self, clamp_existing_to_range: bool) -> Self {
+        self.clamp_existing_to_range = clamp_existing_to_range;
         self
     }
 
@@ -128,54 +338,6 @@ impl<'a> RotarySlider<'a> {
     }
 
     #[inline]
-    pub fn text(mut self, text: impl Into<WidgetText>) -> Self {
-        self.text = text.into();
-        self
-    }
-
-    #[inline]
-    pub fn text_color(mut self, text_color: Color32) -> Self {
-        self.text = self.text.color(text_color);
-        self
-    }
-
-    #[inline]
-    pub fn logiarithmic(mut self, logarithmic: bool) -> Self {
-        self.spec.logarithmic = logarithmic;
-        self
-    }
-
-    #[inline]
-    pub fn smallest_positive(mut self, smallest_positive: f64) -> Self {
-        self.spec.smallest_positive = smallest_positive;
-        self
-    }
-
-    #[inline]
-    pub fn largest_finite(mut self, largest_finite: f64) -> Self {
-        self.spec.largest_finite = largest_finite;
-        self
-    }
-
-    #[inline]
-    pub fn clamping(mut self, clamping: SliderClamping) -> Self {
-        self.clamping = clamping;
-        self
-    }
-
-    #[inline]
-    pub fn step_by(mut self, step: f64) -> Self {
-        self.step = if step != 0.0 { Some(step) } else { None };
-        self
-    }
-
-    #[inline]
-    pub fn drag_value_speed(mut self, drag_value_speed: f64) -> Self {
-        self.drag_value_speed = Some(drag_value_speed);
-        self
-    }
-
-    #[inline]
     pub fn min_decimals(mut self, min_decimals: usize) -> Self {
         self.min_decimals = min_decimals;
         self
@@ -186,7 +348,7 @@ impl<'a> RotarySlider<'a> {
         self.max_decimals = Some(max_decimals);
         self
     }
-
+    
     #[inline]
     pub fn max_decimals_opt(mut self, max_decimals: Option<usize>) -> Self {
         self.max_decimals = max_decimals;
@@ -200,19 +362,7 @@ impl<'a> RotarySlider<'a> {
         self
     }
 
-    #[inline]
-    pub fn trailing_fill(mut self, trailing_fill: bool) -> Self {
-        self.trailing_fill = Some(trailing_fill);
-        self
-    }
-
-    #[inline]
-    pub fn handle_shape(mut self, handle_shape: HandleShape) -> Self {
-        self.handle_shape = Some(handle_shape);
-        self
-    }
-
-    pub fn customer_formatter(
+    pub fn custom_formatter(
         mut self,
         formatter: impl 'a + Fn(f64, RangeInclusive<usize>) -> String,
     ) -> Self {
@@ -220,549 +370,163 @@ impl<'a> RotarySlider<'a> {
         self
     }
 
-    #[inline]
-    pub fn customer_parser(mut self, parser: impl 'a + Fn(&str) -> Option<f64>) -> Self {
-        self.custom_parser = Some(Box::new(parser));
-        self
-    }
+    pub fn binary(self, min_width: usize, twos_compliment: bool) -> Self {
+        assert!(min_width > 0, "DragValue::binary: `min_width` must be greater than 0");
 
-    pub fn integer(self) -> Self {
-        self.fixed_decimals(0).smallest_positive(1.0).step_by(1.0)
-    }
-
-    fn get_value(&mut self) -> f64 {
-        let value = get(&mut self.get_set_value);
-
-        if self.clamping == SliderClamping::Always {
-            value
-            //clamp_value_to_range(value, self.range.clone())
+        if twos_compliment {
+            self.custom_formatter(move |n, _| format!("{:0>min_width$b}", n as i64))
         } else {
-            value
+            self.custom_formatter(move |n, _| {
+                let sign = if n < 0.0 { "-" } else { "" };
+                format!("{sign}{:0>min_width$b}", n.abs() as i64)
+            })
         }
     }
 
-    fn set_value(&mut self, mut value: f64) {
-        // if self.clamping != SliderClamping::Never {
-        //     value = clamp_value_to_range(value, self.range.clone());
-        // }
+    // TODO: hex and octal
 
-        if let Some(step) = self.step {
-            let start = *self.range.start();
-            value = start + ((value - start) / step).round() * step;
-        }
-
-        if let Some(max_decimals) = self.max_decimals {
-            value = emath::round_to_decimals(value, max_decimals);
-        }
-
-        set(&mut self.get_set_value, value);
-    }
-
-    fn range(&self) -> RangeInclusive<f64> {
-        self.range.clone()
-    }
-
-    fn value_from_position(&self, position: f32, position_range: Rangef) -> f64 {
-        let normalized = remap_clamp(position, position_range, 0.0..=1.0) as f64;
-        value_from_normalized(normalized, self.range(), &self.spec)
-    }
-
-    fn position_from_value(&self, value: f64, position_range: Rangef) -> f32 {
-        let normalized = normalized_from_value(value, self.range(), &self.spec);
-        lerp(position_range, normalized as f32)
+    pub fn with_delta_offset(mut self, delta_offset: f32) -> Self {
+        self.delta_offset = delta_offset;
+        self
     }
 }
 
-impl RotarySlider<'_> {
-    fn allocate_slider_space(&self, ui: &mut Ui, thickness: f32) -> Response {
-        // TODO - the size should probably be configurable
-        let desired_size = vec2(64.0, 64.0);
-        ui.allocate_response(desired_size, Sense::drag())
-    }
 
-    fn pointer_position(&self, pointer_position_2d: Pos2) -> f32 {
-        pointer_position_2d.y
-    }
+impl Widget for DragValue<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let Self {
+            mut get_set_value,
+            speed,
+            range,
+            clamp_existing_to_range,
+            prefix,
+            suffix,
+            min_decimals,
+            max_decimals,
+            custom_formatter,
+            delta_offset
+        } = self;
 
-    fn slider_ui(&mut self, ui: &mut Ui, response: &Response) {
-        let rect = &response.rect;
-        let handle_shape = self
-            .handle_shape
-            .unwrap_or_else(|| ui.style().visuals.handle_shape);
+        let shift = ui.input(|i| i.modifiers.command_only());
+        let id = ui.next_auto_id();
+        let is_slow_speed = shift && ui.ctx().is_being_dragged(id);
 
-        let position_range = self.position_range(rect, &handle_shape);
-
-        if let Some(pointer_position_2d) = response.interact_pointer_pos() {
-            let position = self.pointer_position(pointer_position_2d);
-            /*
-            let new_value = if self.smart_aim {
-                let aim_radius = ui.input(|i| i.aim_radius());
-                emath::smart_aim::best_in_range_f64(
-                    self.value_from_position(position - aim_radius, position_range),
-                    self.value_from_position(position + aim_radius, position_range),
-                )
-            } else {
-                self.value_from_position(position, position_range);    
-            };
-            */
-            let new_value = self.value_from_position(position, position_range);    
-            self.set_value(new_value);
+        if ui.memory_mut(|mem| !mem.had_focus_last_frame(id) && mem.has_focus(id)) {
+            ui.data_mut(|data| data.remove::<String>(id));
         }
 
-        let mut decrement = 0usize;
-        let mut increment = 0usize;
+        let old_value = get(&mut get_set_value);
+        let mut value = old_value;
+        let aim_rad = ui.input(|i| i.aim_radius() as f64);
 
-        /*
-        if response.has_focus() {
-            ui.ctx().memory_mut(|m| {
-                m.set_focus_lock_filter(
-                    response.id,
-                    EventFilter {
-                        // pressing arrows in the orientation of the
-                        // slider should not move focus to next widget
-                        horizontal_arrows: matches!(
-                            self.orientation,
-                            SliderOrientation::Horizontal
-                        ),
-                        vertical_arrows: matches!(self.orientation, SliderOrientation::Vertical),
-                        ..Default::default()
-                    },
-                );
-            });
+        let auto_decimals = (aim_rad / speed.abs()).log10().ceil().clamp(0.0, 15.0) as usize;
+        let auto_decimals = auto_decimals + is_slow_speed as usize;
+        let max_decimals = max_decimals
+            .unwrap_or(auto_decimals + 2)
+            .at_least(min_decimals);
 
-            let (dec_key, inc_key) = (Key::ArrowUp, Key::ArrowDown);
+        let auto_decimals = auto_decimals.clamp(min_decimals, max_decimals);
 
-            ui.input(|input| {
-                decrement += input.num_presses(dec_key);
-                increment += input.num_presses(inc_key);
-            });
+        if clamp_existing_to_range {
+            value = clamp_value_to_range(value, range.clone());
         }
-        */
 
-        let kb_step = increment as f32 - decrement as f32;
+        if old_value != value {
+            set(&mut get_set_value, value);
+            ui.data_mut(|data| data.remove::<String>(id));
+        }
 
-        if kb_step != 0.0 {
-            let ui_point_per_step = 1.0; // move this many ui points for each kb_step
-            let prev_value = self.get_value();
-            let prev_position = self.position_from_value(prev_value, position_range);
-            let new_position = prev_position + ui_point_per_step * kb_step;
-            /*
-            let new_value = match self.step {
-                Some(step) => prev_value + (kb_step as f64 * step),
-                None if self.smart_aim => {
-                    let aim_radius = 0.49 * ui_point_per_step; // Chosen so we don't include `prev_value` in the search.
-                    emath::smart_aim::best_in_range_f64(
-                        self.value_from_position(new_position - aim_radius, position_range),
-                        self.value_from_position(new_position + aim_radius, position_range),
-                    )
+        let value_text = match custom_formatter {
+            Some(custom_formatter) => custom_formatter(value, auto_decimals..=max_decimals),
+            None => ui.style().number_formatter.format(value, auto_decimals..=max_decimals),
+        };
+
+        let text_style = ui.style().drag_value_text_style.clone();
+
+        #[allow(clippy::redundant_clone)]
+        let mut response = {
+            let button = Button::new(
+                RichText::new(format!("{}{}{}", prefix, value_text.clone(), suffix))
+                .text_style(text_style),
+            )
+            .wrap_mode(TextWrapMode::Extend)
+            .sense(Sense::drag())
+            .min_size(ui.spacing().interact_size);
+
+            let response = ui.add(button);
+
+            if ui.input(|i| i.pointer.any_pressed() || i.pointer.any_released()) {
+                ui.data_mut(|data| data.remove::<f64>(id));
+            }
+
+            if response.dragged() {
+                let mdelta = response.drag_delta() + Vec2::new(0.0, delta_offset);
+                let delta_points = -mdelta.y;
+
+                let speed = if is_slow_speed { speed / 10.0 } else { speed };
+                let delta_value = delta_points as f64 * speed;
+
+                if delta_value != 0.0 {
+                    let precise_value = ui.data_mut(|data| data.get_temp::<f64>(id));
+                    let precise_value = precise_value.unwrap_or(value);
+                    let precise_value = precise_value + delta_value;
+
+                    let aim_delta = aim_rad * speed;
+                    let rounded_new_value = emath::smart_aim::best_in_range_f64(
+                        precise_value - aim_delta,
+                        precise_value + aim_delta,
+                    );
+
+                    let rounded_new_value = emath::round_to_decimals(rounded_new_value, auto_decimals);
+                    let rounded_new_value = clamp_value_to_range(rounded_new_value, range.clone());
+                    set(&mut get_set_value, rounded_new_value);
+
+                    ui.data_mut(|data| data.insert_temp::<f64>(id, precise_value));
                 }
-                _ => self.value_from_position(new_position, position_range),
-            };
-            */
-            let new_value = self.value_from_position(new_position, position_range);
-            self.set_value(new_value);
-        }
+            }
 
-        if ui.is_rect_visible(response.rect) { 
-            let val = self.get_value() / 100.0;// TODO: This should be the max range
-            let visuals = ui.style().interact(response);
-            let widget_visuals = &ui.visuals().widgets;
-            let spacing = &ui.style().spacing;
-            let corner_radius = widget_visuals.inactive.corner_radius;
-            let radius = 25.0;
-            let stroke = Stroke {
-                width: 1.0, color: Color32::CYAN,
-            };
+            response
+        };
 
-            ui.painter()
-                // .rect_filled(dial_rect, corner_radius, widget_visuals.inactive.bg_fill);
-                .rect_stroke(*rect, corner_radius, stroke, StrokeKind::Outside);
-
-            let center = response.rect.center();
-
-            // Rotates counter clockwise
-            let mut start_angle = PI * 2.25;
-            let mut end_angle = PI * 0.75;
-
-            let _ = &self.draw_arc(
-                &ui.painter(),
-                center,
-                radius,
-                start_angle,
-                end_angle,
-                64,              // number of segments (smoothness)
-                Color32::LIGHT_BLUE,
-                2.0,             // thickness
-            );
-
-            // Draw the line gauge
-            let t = val as f32;
-            let value_angle = start_angle + (1.0 - t) * (end_angle - start_angle);
-            let x = center.x + radius * value_angle.cos();
-            let y = center.y + radius * value_angle.sin();
-            let mut line_points = Vec::with_capacity(2);
-            line_points.push(Pos2 { x: center.x, y: center.y });
-            line_points.push(Pos2 { x, y });
-
-            ui.painter().add(Shape::line(line_points, Stroke::new(2.0, Color32::YELLOW)));
-        }
-    }
-
-     fn current_gradient(&mut self, position_range: Rangef) -> f64 {
-        let value = self.get_value();
-        let value_from_pos = |position: f32| self.value_from_position(position, position_range);
-        let pos_from_value = |value: f64| self.position_from_value(value, position_range);
-        let left_value = value_from_pos(pos_from_value(value) - 0.5);
-        let right_value = value_from_pos(pos_from_value(value) + 0.5);
-        right_value - left_value
-    }
-
-    fn add_contents(&mut self, ui: &mut Ui) -> Response {
-        let old_value = self.get_value();
-
-        if self.clamping == SliderClamping::Always {
-            self.set_value(old_value);
-        }
-
-        let thickness = ui
-            .text_style_height(&TextStyle::Body)
-            .at_least(ui.spacing().interact_size.y);
-
-        let mut response = self.allocate_slider_space(ui, thickness);
-
-        self.slider_ui(ui, &response);
-        let value = self.get_value();
-
-        if value != old_value {
+        if get(&mut get_set_value) != old_value {
             response.mark_changed();
         }
 
-        response.widget_info(|| WidgetInfo::slider(ui.is_enabled(), value, self.text.text()));
-
-        let slider_response = response.clone();
-        let value_response = if self.show_value {
-            let handle_shape = self
-                .handle_shape
-                .unwrap_or_else(|| ui.style().visuals.handle_shape);
-
-            let position_range = self.position_range(&response.rect, &handle_shape);
-            let value_response = self.value_ui(ui, position_range);
-
-            if value_response.gained_focus()
-                || value_response.has_focus()
-                || value_response.lost_focus()
-            {
-                // Use the [`DragValue`] id as the id of the whole widget,
-                // so that the focus events work as expected.
-                response = value_response.union(response);
-            } else {
-                // Use the slider id as the id for the whole widget
-                response = response.union(value_response.clone());
-            }
-            Some(value_response)
-        } else {
-            None
-        };
-
-        if !self.text.is_empty() {
-            let label_response =
-                ui.add(Label::new(self.text.clone()).wrap_mode(TextWrapMode::Extend));
-            // The slider already has an accessibility label via widget info,
-            // but sometimes it's useful for a screen reader to know
-            // that a piece of text is a label for another widget,
-            // e.g. so the text itself can be excluded from navigation.
-            slider_response.labelled_by(label_response.id);
-            if let Some(value_response) = value_response {
-                value_response.labelled_by(label_response.id);
-            }
-        }
-
+        response.widget_info(|| WidgetInfo::drag_value(ui.is_enabled(), value));
         response
-    }
+    }   
+}
 
-    
-    fn value_ui(&mut self, ui: &mut Ui, position_range: Rangef) -> Response {
-        // If [`DragValue`] is controlled from the keyboard and `step` is defined, set speed to `step`
-        let change = ui.input(|input| {
-            input.num_presses(Key::ArrowUp) as i32 + input.num_presses(Key::ArrowRight) as i32
-                - input.num_presses(Key::ArrowDown) as i32
-                - input.num_presses(Key::ArrowLeft) as i32
-        });
-
-        let any_change = change != 0;
-
-        let speed = if let (Some(step), true) = (self.step, any_change) {
-            // If [`DragValue`] is controlled from the keyboard and `step` is defined, set speed to `step`
-            step
-        } else {
-            self.drag_value_speed
-                .unwrap_or_else(|| self.current_gradient(position_range))
-        };
-
-        let mut value = self.get_value();
-
-        let response = ui.add({
-            let mut dv = DragValue::new(&mut value)
-                .speed(speed)
-                .min_decimals(self.min_decimals)
-                .max_decimals_opt(self.max_decimals)
-                .suffix(self.suffix.clone())
-                .prefix(self.prefix.clone());
-
-            /*
-            match self.clamping {
-                SliderClamping::Never => {}
-                SliderClamping::Edits => {
-                    dv = dv.range(self.range.clone()).clamp_existing_to_range(false);
-                }
-
-                SliderClamping::Always => {
-                    dv = dv.range(self.range.clone()).clamp_existing_to_range(true);
-                }
-            }
-            */
-
-            if let Some(fmt) = &self.custom_formatter {
-                dv = dv.custom_formatter(fmt);
-            };
-
-            if let Some(parser) = &self.custom_parser {
-                dv = dv.custom_parser(parser);
-            }
-            dv
-        });
-
-        if value != self.get_value() {
-            self.set_value(value);
-        }
-
-        response
-    }
-
-    fn handle_radius(&self, rect: &Rect) -> f32 {
-        /*
-        let limit = match self.orientation {
-            SliderOrientation::Horizontal => rect.height(),
-            SliderOrientation::Vertical => rect.width(),
-        };
-        */
-
-        rect.height() / 2.5
-    }
-
-    fn position_range(&self, rect: &Rect, handle_shape: &style::HandleShape) -> Rangef {
-        let handle_radius = self.handle_radius(rect);
-
-        let handle_radius = match handle_shape {
-            style::HandleShape::Circle => handle_radius,
-            style::HandleShape::Rect { aspect_ratio } => handle_radius * aspect_ratio,
-        };
-
-        // The vertical case has to be flipped because the largest slider value maps to the
-        // lowest y value (which is at the top)
-        rect.y_range().shrink(handle_radius).flip()
-    }
-
-    /// Draw an arc on the given painter
-    fn draw_arc(
-        &self,
-        painter: &Painter,
-        center: Pos2,
-        radius: f32,
-        start_angle: f32,
-        end_angle: f32,
-        segments: usize,
-        color: Color32,
-        thickness: f32,
-    ) {
-        let mut points = Vec::with_capacity(segments + 1);
-
-        // May need to account for clockwise vs counter clockwise drawing
-        // based on start_angle <=> end_angle
-        for i in 0..=segments {
-            // t is the percentage of the total
-            let t = i as f32/ segments as f32;
-
-            // How this works when start_angle > end_angle
-            // 0.75PI - 2.25PI = -1.5PI (Diff)
-            // 2.25PI + 0 *-1.5PI = 2.25PI
-            // 2.25PI + 0.0166 * -1.5PI = 2.22PI
-            // ...
-            // 2.25PI + 1 * -1.5PI = 0.75PI
-            // It walks from the start angle and then goes counter clockwise
-            let angle = start_angle + t * (end_angle - start_angle);
-
-            // This is the actual segment that makes up the arc
-            let x = center.x + radius * angle.cos();
-            let y = center.y + radius * angle.sin();
-            points.push(Pos2 { x, y });
-        }
-
-        painter.add(Shape::line(points, Stroke::new(thickness, color)));
+fn parse(custom_parser: &Option<NumParser<'_>>, value_text: &str) -> Option<f64> {
+    match &custom_parser {
+        Some(parser) => parser(value_text).copied(),
+        None => default_parser(value_text),
     }
 }
 
+fn default_parser(text: &str) -> Option<f64> {
+    let text = text
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .map(|c| if c == '-' { '-' } else { c})
+        .collect::<String>();
 
-impl Widget for RotarySlider<'_> {
-    fn ui(mut self, ui: &mut Ui) -> Response {
-        let inner_response = ui.vertical(|ui| self.add_contents(ui));
-        inner_response.inner | inner_response.response
+    text.parse().ok()
+}
+
+pub(crate) fn clamp_value_to_range(x: f64, range: RangeInclusive<f64>) -> f64 {
+    let (mut min, mut max) = (*range.start(), *range.end());
+
+    if min.total_cmp(&max) == Ordering::Greater {
+        (min, max) = (max, min);
+    }
+
+    match x.total_cmp(&min) {
+        Ordering::Less | Ordering::Equal => min,
+        Ordering::Greater => match x.total_cmp(&max) {
+            Ordering::Greater | Ordering::Equal => max,
+            Ordering::Less => x,
+        },
     }
 }
-
-
-fn value_from_normalized(normalized: f64, range: RangeInclusive<f64>, spec: &RotarySliderSpec) -> f64 {
-    let (min, max) = (*range.start(), *range.end());
-
-    if min.is_nan() || max.is_nan() {
-        f64::NAN
-    } else if min == max {
-        min
-    } else if min > max {
-        value_from_normalized(1.0 - normalized, max..=min, spec)
-    } else if normalized <= 0.0 {
-        min
-    } else if normalized >= 1.0 {
-        max
-    } else if spec.logarithmic {
-        if max <= 0.0 {
-            // non-positive range
-            -value_from_normalized(normalized, -min..=-max, spec)
-        } else if 0.0 <= min {
-            let (min_log, max_log) = range_log10(min, max, spec);
-            let log = lerp(min_log..=max_log, normalized);
-            10.0_f64.powf(log)
-        } else {
-            assert!(min < 0.0 && 0.0 < max);
-            let zero_cutoff = logarithmic_zero_cutoff(min, max);
-
-            if normalized < zero_cutoff {
-                // negative
-                value_from_normalized(
-                    remap(normalized, 0.0..=zero_cutoff, 0.0..=1.0),
-                    min..=0.0,
-                    spec,
-                )
-            } else {
-                // positive
-                value_from_normalized(
-                    remap(normalized, zero_cutoff..=1.0, 0.0..=1.0),
-                    0.0..=max,
-                    spec,
-                )
-            }
-        }
-    } else {
-        debug_assert!(
-            min.is_finite() && max.is_finite(),
-            "You should use a logarithmic range"
-        );
-
-        lerp(range, normalized.clamp(0.0, 1.0))
-    }
-}
-
-fn normalized_from_value(value: f64, range: RangeInclusive<f64>, spec: &RotarySliderSpec) -> f64 {
-    let (min, max) = (*range.start(), *range.end());
-
-    if min.is_nan() || max.is_nan() {
-        f64::NAN
-    } else if min == max {
-        0.5 // empty range, show center of slider
-    } else if min > max {
-        1.0 - normalized_from_value(value, max..=min, spec)
-    } else if value <= min {
-        0.0
-    } else if value >= max {
-        1.0
-    } else if spec.logarithmic {
-        if max <= 0.0 {
-            // non-positive range
-            normalized_from_value(-value, -min..=-max, spec)
-        } else if 0.0 <= min {
-            let (min_log, max_log) = range_log10(min, max, spec);
-            let value_log = value.log10();
-            remap_clamp(value_log, min_log..=max_log, 0.0..=1.0)
-        } else {
-            assert!(min < 0.0 && 0.0 < max);
-            let zero_cutoff = logarithmic_zero_cutoff(min, max);
-
-            if value < 0.0 {
-                // negative
-                remap(
-                    normalized_from_value(value, min..=0.0, spec),
-                    0.0..=1.0,
-                    0.0..=zero_cutoff,
-                )
-            } else {
-                // positive side
-                remap(
-                    normalized_from_value(value, 0.0..=max, spec),
-                    0.0..=1.0,
-                    zero_cutoff..=1.0,
-                )
-            }
-        }
-    } else {
-        debug_assert!(
-            min.is_finite() && max.is_finite(),
-            "You should use a logarithmic range"
-        );
-
-        remap_clamp(value, range, 0.0..=1.0)
-    }
-}
-
-fn range_log10(min: f64, max: f64, spec: &RotarySliderSpec) -> (f64, f64) {
-    assert!(spec.logarithmic);
-    assert!(min <= max);
-
-    if min == 0.0 && max == INFINITY {
-        (spec.smallest_positive.log10(), INF_RANGE_MAGNITUDE)
-    } else if min == 0.0 {
-        if spec.smallest_positive < max {
-            (spec.smallest_positive.log10(), max.log10())
-        } else {
-            (max.log10() - INF_RANGE_MAGNITUDE, max.log10())
-        }
-    } else if max == INFINITY {
-        if min < spec.largest_finite {
-            (min.log10(), spec.largest_finite.log10())
-        } else {
-            (min.log10(), min.log10() + INF_RANGE_MAGNITUDE)
-        }
-    } else {
-        (min.log10(), max.log10())
-    }
-}
-
-/// where to put the zero cutoff for logarithmic sliders
-/// that crosses zero ?
-fn logarithmic_zero_cutoff(min: f64, max: f64) -> f64 {
-    assert!(min < 0.0 && 0.0 < max);
-
-    let min_magnitude = if min == -INFINITY {
-        INF_RANGE_MAGNITUDE
-    } else {
-        min.abs().log10().abs()
-    };
-
-    let max_magnitude = if max == INFINITY {
-        INF_RANGE_MAGNITUDE
-    } else {
-        max.log10().abs()
-    };
-
-    let cutoff = min_magnitude / (min_magnitude + max_magnitude);
-
-    debug_assert!(
-        0.0 <= cutoff && cutoff <= 1.0,
-        "Bad cutoff {cutoff:?} for min {min:?} and max {max:?}"
-    );
-
-    cutoff
-}
-
-
-
 
