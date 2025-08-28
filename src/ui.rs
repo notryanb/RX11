@@ -3,6 +3,7 @@ use nih_plug_egui::{egui, widgets};
 use nih_plug_egui::{resizable_window::ResizableWindow};
 use nih_plug_egui::EguiState;
 use crate::egui::{Context, Vec2};
+use crate::rotary_slider::{Knob, KnobStyle, LabelPosition};
 use std::sync::Arc;
 
 use crate::{EventCollector, GlideMode, PolyMode, Preset, Presets, RX11Params, UiState};
@@ -31,7 +32,7 @@ pub fn rx11_egui_ui(
 
     ResizableWindow::new("res-wind")
         .min_size(Vec2::new(800.0, 600.0))
-        .show(egui_ctx, egui_state.as_ref(), |ui| { 
+        .show(egui_ctx, egui_state.as_ref(), |_ui| { 
 
             // Load something that makes sound because the synth is initialized
             // without taking presets into consideration. This will also be a good
@@ -116,6 +117,25 @@ fn synth_view(
     params: &RX11Params
 ) {
     egui::CentralPanel::default().show(egui_ctx, |ui| {
+        // TODO:
+        // I don't want to have to copy the value and then do all the setter stuff.
+        // This should be made into a nih_plug style widget like the other sliders
+        // Also, setting the min/max range on both the Param and here is not ideal.
+        let vol_raw = &params.output_level.value();
+        let mut vol_raw2 = vol_raw.clone(); // 
+        let vol_min = nih_plug::util::db_to_gain(-30.0);
+        let vol_max = nih_plug::util::db_to_gain(6.0);
+        if ui.add(
+                Knob::new(&mut vol_raw2, vol_min, vol_max, KnobStyle::Wiper)
+                    .with_label("Volume", LabelPosition::Bottom)
+            ).dragged() {
+            setter.begin_set_parameter(&params.output_level);
+            setter.set_parameter(&params.output_level, vol_raw2);
+            setter.end_set_parameter(&params.output_level);
+        }
+
+        ui.separator();
+        
         egui::ScrollArea::vertical()
             .scroll_bar_visibility(
                 egui::containers::scroll_area::ScrollBarVisibility::AlwaysVisible,
@@ -277,11 +297,11 @@ fn synth_view(
                 ui.label("Tuning");
                 ui.add(widgets::ParamSlider::for_param(&params.tuning, setter));
 
-                ui.label("Volume");
-                ui.add(widgets::ParamSlider::for_param(
-                    &params.output_level,
-                    setter,
-                ));
+                // ui.label("Volume");
+                // ui.add(widgets::ParamSlider::for_param(
+                //     &params.output_level,
+                //     setter,
+                // ));
             })
     });// END CENTRAL PANEL
 }
