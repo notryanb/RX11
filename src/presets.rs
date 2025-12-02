@@ -27,7 +27,9 @@ impl Presets {
         let file_bytes = include_bytes!("../presets.csv");
         let csv = std::str::from_utf8(file_bytes).expect("Failed to convert csv to utf8 bytes");
         let lines = csv.lines();
-        let headers = &lines.clone().take(1)
+        let headers = &lines
+            .clone()
+            .take(1)
             .collect::<Vec<_>>()
             .first()
             .expect("failed to get headers")
@@ -40,7 +42,10 @@ impl Presets {
                 let values: Vec<_> = line.split(',').collect();
                 let mut preset = Preset::new(values[0].trim());
                 for (i, val) in values.iter().skip(1).enumerate() {
-                    preset.add_param(headers[i + 1], val.trim().parse::<f32>().expect("Failed to parse f32"));
+                    preset.add_param(
+                        headers[i + 1],
+                        val.trim().parse::<f32>().expect("Failed to parse f32"),
+                    );
                 }
                 preset
             })

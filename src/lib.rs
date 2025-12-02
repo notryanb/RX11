@@ -12,15 +12,15 @@ mod logger;
 mod noise_generator;
 mod oscillator;
 mod presets;
+mod rotary_slider;
 mod state_variable_filter;
 mod synth;
-mod rotary_slider;
 mod ui;
 mod voice;
 
+use crate::logger::EventCollector;
 use crate::presets::{Preset, Presets};
 use crate::synth::Synth;
-use crate::logger::EventCollector;
 use crate::ui::{rx11_egui_ui, UiView};
 
 const MAX_BLOCK_SIZE: usize = 64;
@@ -102,13 +102,13 @@ impl Default for RX11 {
         tracing_subscriber::registry()
             .with(collector.clone())
             .init();
-        
+
         Self {
             params: Arc::new(RX11Params::default()),
             synth: Synth::new(),
             presets: Presets::init(),
-            ui_state: UiState { 
-                selected_preset: "Init".into(), 
+            ui_state: UiState {
+                selected_preset: "Init".into(),
                 loaded_preset_on_startup: false,
                 _current_view: UiView::Synth,
                 show_debug: false,
@@ -117,7 +117,6 @@ impl Default for RX11 {
         }
     }
 }
-
 
 #[derive(Params)]
 pub struct RX11Params {
@@ -493,7 +492,10 @@ impl Default for RX11Params {
                 FloatRange::Skewed {
                     min: util::db_to_gain(-30.0),
                     max: util::db_to_gain(6.0),
-                    factor: FloatRange::gain_skew_factor(util::db_to_gain(-30.0), util::db_to_gain(6.0)),
+                    factor: FloatRange::gain_skew_factor(
+                        util::db_to_gain(-30.0),
+                        util::db_to_gain(6.0),
+                    ),
                 },
             )
             .with_smoother(SmoothingStyle::Logarithmic(50.0))
@@ -514,7 +516,6 @@ impl Default for RX11Params {
         }
     }
 }
-
 
 impl Plugin for RX11 {
     const NAME: &'static str = "RX11 Synth";
@@ -554,7 +555,6 @@ impl Plugin for RX11 {
         self.synth.reset(&self.params);
     }
 
-
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
         let params = self.params.clone();
         let presets = self.presets.clone();
@@ -566,7 +566,15 @@ impl Plugin for RX11 {
             self.ui_state.clone(),
             |_, _| {},
             move |egui_ctx, setter, state| {
-                rx11_egui_ui(&egui_state, egui_ctx, setter, state, &params, &presets, &logger);
+                rx11_egui_ui(
+                    &egui_state,
+                    egui_ctx,
+                    setter,
+                    state,
+                    &params,
+                    &presets,
+                    &logger,
+                );
             },
         )
     }

@@ -10,11 +10,8 @@
 #![allow(clippy::needless_pass_by_value)] // false positives with `impl ToString`
 #![allow(dead_code)]
 
+use crate::egui::{emath, Button, FontId, NumExt, RichText, TextWrapMode, WidgetInfo};
 use crate::egui::{Align2, Color32, Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
-use crate::egui:: {
-    emath, Button, FontId, NumExt, RichText,
-    TextWrapMode, WidgetInfo,
-};
 use nih_plug::params::Param;
 
 use std::{cmp::Ordering, ops::RangeInclusive};
@@ -25,7 +22,6 @@ pub enum LabelPosition {
     Left,
     Right,
 }
-
 
 pub enum KnobStyle {
     Wiper,
@@ -52,7 +48,7 @@ pub struct Knob<'a, P: Param> {
 }
 
 impl<'a, P: Param> Knob<'a, P> {
-    pub fn new(param: &'a P, value: &'a mut f32, min: f32, max: f32, style: KnobStyle) -> Self{
+    pub fn new(param: &'a P, value: &'a mut f32, min: f32, max: f32, style: KnobStyle) -> Self {
         Self {
             value,
             min,
@@ -93,7 +89,12 @@ impl<'a, P: Param> Knob<'a, P> {
         self
     }
 
-    pub fn with_colors(mut self, knob_color: Color32, line_color: Color32, text_color: Color32) -> Self {
+    pub fn with_colors(
+        mut self,
+        knob_color: Color32,
+        line_color: Color32,
+        text_color: Color32,
+    ) -> Self {
         self.knob_color = knob_color;
         self.line_color = line_color;
         self.text_color = text_color;
@@ -117,7 +118,6 @@ impl<'a, P: Param> Knob<'a, P> {
     }
 }
 
-
 impl<P: Param> Widget for Knob<'_, P> {
     fn ui(self, ui: &mut Ui) -> Response {
         let knob_size = Vec2::splat(self.size);
@@ -140,19 +140,27 @@ impl<P: Param> Widget for Knob<'_, P> {
                 knob_size.y + label_size.y + label_padding * 2.0 + self.label_offset,
             ),
             LabelPosition::Left | LabelPosition::Right => Vec2::new(
-                  knob_size.x + label_size.x + label_padding * 2.0 + self.label_offset,
-                  knob_size.y.max(label_size.y + label_padding * 2.0)      
+                knob_size.x + label_size.x + label_padding * 2.0 + self.label_offset,
+                knob_size.y.max(label_size.y + label_padding * 2.0),
             ),
         };
 
         let left_down = ui.input(|state| state.pointer.primary_down());
-        let sense = if left_down { Sense::drag() } else { Sense::click_and_drag() };
+        let sense = if left_down {
+            Sense::drag()
+        } else {
+            Sense::click_and_drag()
+        };
 
         let (rect, mut response) = ui.allocate_exact_size(adjusted_size, sense);
 
         // Modify State of knob on drag
         if response.dragged() {
-            let modifier = if ui.input(|i| i.modifiers.command_only()) { 0.1 } else { 1.0 };
+            let modifier = if ui.input(|i| i.modifiers.command_only()) {
+                0.1
+            } else {
+                1.0
+            };
             let delta = response.drag_delta().y + self.delta_offset;
             let range = self.max - self.min;
             let step = self.step.unwrap_or(range * 0.005) * modifier;
@@ -177,7 +185,7 @@ impl<P: Param> Widget for Knob<'_, P> {
             LabelPosition::Right => Rect::from_min_size(rect.left_top(), knob_size),
             LabelPosition::Top => Rect::from_min_size(
                 rect.left_bottom() + Vec2::new((rect.width() - knob_size.x) / 2.0, -knob_size.y),
-                knob_size,      
+                knob_size,
             ),
             LabelPosition::Bottom => Rect::from_min_size(
                 rect.left_top() + Vec2::new((rect.width() - knob_size.x) / 2.0, 0.0),
@@ -187,8 +195,8 @@ impl<P: Param> Widget for Knob<'_, P> {
 
         let center = knob_rect.center();
         let radius = knob_size.x / 2.0;
-        let angle = (*self.value - self.min) / (self.max - self.min)
-            * std::f32::consts::PI * 1.5 - std::f32::consts::PI * 1.25;
+        let angle = (*self.value - self.min) / (self.max - self.min) * std::f32::consts::PI * 1.5
+            - std::f32::consts::PI * 1.25;
 
         let knob_color = self.knob_color;
         // let knob_color = if response.hovered() && !response.dragged() {
@@ -219,20 +227,23 @@ impl<P: Param> Widget for Knob<'_, P> {
 
             let (label_pos, alignment) = match self.label_position {
                 LabelPosition::Top => (
-                  Vec2::new(rect.center().x, rect.min.y - self.label_offset + label_padding),
-                  Align2::CENTER_TOP,
+                    Vec2::new(
+                        rect.center().x,
+                        rect.min.y - self.label_offset + label_padding,
+                    ),
+                    Align2::CENTER_TOP,
                 ),
                 LabelPosition::Bottom => (
-                  Vec2::new(rect.center().x, rect.max.y + self.label_offset),
-                  Align2::CENTER_BOTTOM,
+                    Vec2::new(rect.center().x, rect.max.y + self.label_offset),
+                    Align2::CENTER_BOTTOM,
                 ),
                 LabelPosition::Left => (
-                  Vec2::new(rect.min.x - self.label_offset, rect.center().y),
-                  Align2::LEFT_CENTER,
+                    Vec2::new(rect.min.x - self.label_offset, rect.center().y),
+                    Align2::LEFT_CENTER,
                 ),
                 LabelPosition::Right => (
-                  Vec2::new(rect.max.x + self.label_offset, rect.center().y),
-                  Align2::RIGHT_CENTER,
+                    Vec2::new(rect.max.x + self.label_offset, rect.center().y),
+                    Align2::RIGHT_CENTER,
                 ),
             };
 
@@ -254,7 +265,6 @@ impl<P: Param> Widget for Knob<'_, P> {
                 );
             }
         }
-
 
         // DEBUG: Draw the bounding rect
         //painter.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::RED));
@@ -290,7 +300,7 @@ pub struct DragValue<'a> {
     delta_offset: f32,
 }
 
-impl <'a> DragValue<'a> {
+impl<'a> DragValue<'a> {
     pub fn new<Num: emath::Numeric>(value: &'a mut Num) -> Self {
         let slf = Self::from_get_set(move |v: Option<f64>| {
             if let Some(v) = v {
@@ -317,7 +327,7 @@ impl <'a> DragValue<'a> {
             min_decimals: 0,
             max_decimals: None,
             custom_formatter: None,
-            delta_offset: 0.0
+            delta_offset: 0.0,
         }
     }
 
@@ -362,7 +372,7 @@ impl <'a> DragValue<'a> {
         self.max_decimals = Some(max_decimals);
         self
     }
-    
+
     #[inline]
     pub fn max_decimals_opt(mut self, max_decimals: Option<usize>) -> Self {
         self.max_decimals = max_decimals;
@@ -385,7 +395,10 @@ impl <'a> DragValue<'a> {
     }
 
     pub fn binary(self, min_width: usize, twos_compliment: bool) -> Self {
-        assert!(min_width > 0, "DragValue::binary: `min_width` must be greater than 0");
+        assert!(
+            min_width > 0,
+            "DragValue::binary: `min_width` must be greater than 0"
+        );
 
         if twos_compliment {
             self.custom_formatter(move |n, _| format!("{:0>min_width$b}", n as i64))
@@ -405,7 +418,6 @@ impl <'a> DragValue<'a> {
     }
 }
 
-
 impl Widget for DragValue<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let Self {
@@ -418,7 +430,7 @@ impl Widget for DragValue<'_> {
             min_decimals,
             max_decimals,
             custom_formatter,
-            delta_offset
+            delta_offset,
         } = self;
 
         let shift = ui.input(|i| i.modifiers.command_only());
@@ -452,7 +464,10 @@ impl Widget for DragValue<'_> {
 
         let value_text = match custom_formatter {
             Some(custom_formatter) => custom_formatter(value, auto_decimals..=max_decimals),
-            None => ui.style().number_formatter.format(value, auto_decimals..=max_decimals),
+            None => ui
+                .style()
+                .number_formatter
+                .format(value, auto_decimals..=max_decimals),
         };
 
         let text_style = ui.style().drag_value_text_style.clone();
@@ -461,7 +476,7 @@ impl Widget for DragValue<'_> {
         let mut response = {
             let button = Button::new(
                 RichText::new(format!("{}{}{}", prefix, value_text.clone(), suffix))
-                .text_style(text_style),
+                    .text_style(text_style),
             )
             .wrap_mode(TextWrapMode::Extend)
             .sense(Sense::drag())
@@ -491,7 +506,8 @@ impl Widget for DragValue<'_> {
                         precise_value + aim_delta,
                     );
 
-                    let rounded_new_value = emath::round_to_decimals(rounded_new_value, auto_decimals);
+                    let rounded_new_value =
+                        emath::round_to_decimals(rounded_new_value, auto_decimals);
                     let rounded_new_value = clamp_value_to_range(rounded_new_value, range.clone());
                     set(&mut get_set_value, rounded_new_value);
 
@@ -508,7 +524,7 @@ impl Widget for DragValue<'_> {
 
         response.widget_info(|| WidgetInfo::drag_value(ui.is_enabled(), value));
         response
-    }   
+    }
 }
 
 fn parse(custom_parser: &Option<NumParser<'_>>, value_text: &str) -> Option<f64> {
@@ -522,7 +538,7 @@ fn default_parser(text: &str) -> Option<f64> {
     let text = text
         .chars()
         .filter(|c| !c.is_whitespace())
-        .map(|c| if c == '-' { '-' } else { c})
+        .map(|c| if c == '-' { '-' } else { c })
         .collect::<String>();
 
     text.parse().ok()
@@ -543,4 +559,3 @@ pub(crate) fn clamp_value_to_range(x: f64, range: RangeInclusive<f64>) -> f64 {
         },
     }
 }
-
