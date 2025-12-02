@@ -15,6 +15,7 @@ use crate::egui:: {
     emath, Button, FontId, NumExt, RichText,
     TextWrapMode, WidgetInfo,
 };
+use nih_plug::params::Param;
 
 use std::{cmp::Ordering, ops::RangeInclusive};
 
@@ -31,8 +32,9 @@ pub enum KnobStyle {
     Dot,
 }
 
-pub struct Knob<'a> {
+pub struct Knob<'a, P: Param> {
     value: &'a mut f32,
+    param: &'a P,
     min: f32,
     max: f32,
     size: f32,
@@ -49,12 +51,13 @@ pub struct Knob<'a> {
     delta_offset: f32,
 }
 
-impl<'a> Knob<'a> {
-    pub fn new(value: &'a mut f32, min: f32, max: f32, style: KnobStyle) -> Self{
+impl<'a, P: Param> Knob<'a, P> {
+    pub fn new(param: &'a P, value: &'a mut f32, min: f32, max: f32, style: KnobStyle) -> Self{
         Self {
             value,
             min,
             max,
+            param,
             size: 40.0,
             font_size: 12.0,
             stroke_width: 2.0,
@@ -115,7 +118,7 @@ impl<'a> Knob<'a> {
 }
 
 
-impl Widget for Knob<'_> {
+impl<P: Param> Widget for Knob<'_, P> {
     fn ui(self, ui: &mut Ui) -> Response {
         let knob_size = Vec2::splat(self.size);
 
@@ -187,11 +190,12 @@ impl Widget for Knob<'_> {
         let angle = (*self.value - self.min) / (self.max - self.min)
             * std::f32::consts::PI * 1.5 - std::f32::consts::PI * 1.25;
 
-        let knob_color = if response.hovered() && !response.dragged() {
-            Color32::LIGHT_GRAY
-        } else {
-            Color32::GRAY
-        };
+        let knob_color = self.knob_color;
+        // let knob_color = if response.hovered() && !response.dragged() {
+        //     self.knob_color.gamma_multiply(0.5)
+        // } else {
+        //     self.knob_color
+        // };
 
         painter.circle_stroke(center, radius, Stroke::new(self.stroke_width, knob_color));
 
@@ -232,13 +236,23 @@ impl Widget for Knob<'_> {
                 ),
             };
 
-            ui.painter().text(
-                label_pos.to_pos2(),
-                alignment,
-                label_text,
-                font_id,
-                self.text_color,
-            );
+            if response.clicked() || response.dragged() {
+                ui.painter().text(
+                    label_pos.to_pos2(),
+                    alignment,
+                    self.param.to_string(),
+                    font_id,
+                    self.text_color,
+                );
+            } else {
+                ui.painter().text(
+                    label_pos.to_pos2(),
+                    alignment,
+                    label_text,
+                    font_id,
+                    self.text_color,
+                );
+            }
         }
 
 
