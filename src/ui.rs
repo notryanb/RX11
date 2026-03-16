@@ -127,6 +127,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
             .add(
                 Knob::new(
                     &params.output_level,
+                    setter,
                     &mut vol_raw,
                     vol_min,
                     vol_max,
@@ -227,6 +228,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.osc_mix,
+                                setter,
                                 &mut osc_mix_raw,
                                 mix_min,
                                 mix_max,
@@ -249,7 +251,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                     let mut octave = (&params.octave.value()).clone();
                     if ui
                         .add(
-                            Knob::new(&params.octave, &mut octave, -2.0, 20.0, KnobStyle::Wiper)
+                            Knob::new(&params.octave, setter, &mut octave, -2.0, 20.0, KnobStyle::Wiper)
                                 .with_label("osc1 octave", LabelPosition::Bottom)
                                 .with_colors(
                                     Color32::from_hex("#8BDEAC").unwrap(),
@@ -267,7 +269,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                     let mut tuning = (&params.tuning.value()).clone();
                     if ui
                         .add(
-                            Knob::new(&params.tuning, &mut tuning, -100.0, 100.0, KnobStyle::Wiper)
+                            Knob::new(&params.tuning, setter, &mut tuning, -100.0, 100.0, KnobStyle::Wiper)
                                 .with_label("osc1 tuning", LabelPosition::Bottom)
                                 .with_colors(
                                     Color32::from_hex("#8BDEAC").unwrap(),
@@ -289,6 +291,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.osc_tune,
+                                setter,
                                 &mut osc_tune_raw,
                                 osc_tune_min,
                                 osc_tune_max,
@@ -315,6 +318,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.osc_fine_tune,
+                                setter,
                                 &mut osc_fine_tune_raw,
                                 osc_fine_tune_min,
                                 osc_fine_tune_max,
@@ -341,6 +345,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.glide_rate,
+                                setter,
                                 &mut glide_rate_raw,
                                 glide_rate_min,
                                 glide_rate_max,
@@ -367,6 +372,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.glide_bend,
+                                setter,
                                 &mut glide_bend_raw,
                                 glide_bend_min,
                                 glide_bend_max,
@@ -391,6 +397,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.noise_level,
+                                setter,
                                 &mut noise,
                                 0.0,
                                 100.0,
@@ -421,6 +428,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_freq,
+                                setter,
                                 &mut filter_freq_raw,
                                 filter_freq_min,
                                 filter_freq_max,
@@ -442,6 +450,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_reso,
+                                setter,
                                 &mut filter_reso_raw,
                                 filter_reso_min,
                                 filter_reso_max,
@@ -463,6 +472,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_lfo,
+                                setter,
                                 &mut filter_lfo_raw,
                                 filter_lfo_min,
                                 filter_lfo_max,
@@ -484,6 +494,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_velocity,
+                                setter,
                                 &mut filter_vel_raw,
                                 filter_vel_min,
                                 filter_vel_max,
@@ -505,6 +516,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_env,
+                                setter,
                                 &mut filter_env_raw,
                                 filter_env_min,
                                 filter_env_max,
@@ -526,6 +538,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_attack,
+                                setter,
                                 &mut filter_attack_raw,
                                 0.0,
                                 100.0,
@@ -545,6 +558,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_decay,
+                                setter,
                                 &mut filter_decay,
                                 0.0,
                                 100.0,
@@ -564,6 +578,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_sustain,
+                                setter,
                                 &mut filter_sustain,
                                 0.0,
                                 100.0,
@@ -583,6 +598,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.filter_release,
+                                setter,
                                 &mut filter_release,
                                 0.0,
                                 100.0,
@@ -606,6 +622,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.env_attack,
+                                setter,
                                 &mut env_attack,
                                 0.0,
                                 100.0,
@@ -625,6 +642,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.env_decay,
+                                setter,
                                 &mut env_decay,
                                 0.0,
                                 100.0,
@@ -644,6 +662,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.env_sustain,
+                                setter,
                                 &mut env_sustain,
                                 0.0,
                                 100.0,
@@ -663,6 +682,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.env_release,
+                                setter,
                                 &mut env_release,
                                 0.0,
                                 100.0,
@@ -684,7 +704,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                     let mut lfo_rate = (&params.lfo_rate.value()).clone();
                     if ui
                         .add(
-                            Knob::new(&params.lfo_rate, &mut lfo_rate, 0.0, 1.0, KnobStyle::Wiper)
+                            Knob::new(&params.lfo_rate, setter, &mut lfo_rate, 0.0, 1.0, KnobStyle::Wiper)
                                 .with_label("lfo rate", LabelPosition::Bottom),
                         )
                         .dragged()
@@ -699,6 +719,7 @@ fn synth_view(egui_ctx: &Context, setter: &ParamSetter, params: &RX11Params) {
                         .add(
                             Knob::new(
                                 &params.vibrato,
+                                setter,
                                 &mut vibrato,
                                 -100.0,
                                 100.0,

@@ -13,6 +13,7 @@
 use crate::egui::{emath, Button, FontId, NumExt, RichText, TextWrapMode, WidgetInfo};
 use crate::egui::{Align2, Color32, Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
 use nih_plug::params::Param;
+use nih_plug::context::gui::ParamSetter;
 
 use std::{cmp::Ordering, ops::RangeInclusive};
 
@@ -31,6 +32,7 @@ pub enum KnobStyle {
 pub struct Knob<'a, P: Param> {
     value: &'a mut f32,
     param: &'a P,
+    setter: &'a ParamSetter<'a>,
     min: f32,
     max: f32,
     size: f32,
@@ -48,12 +50,13 @@ pub struct Knob<'a, P: Param> {
 }
 
 impl<'a, P: Param> Knob<'a, P> {
-    pub fn new(param: &'a P, value: &'a mut f32, min: f32, max: f32, style: KnobStyle) -> Self {
+    pub fn new(param: &'a P, setter: &'a ParamSetter<'a>, value: &'a mut f32, min: f32, max: f32, style: KnobStyle) -> Self {
         Self {
             value,
             min,
             max,
             param,
+            setter,
             size: 40.0,
             font_size: 12.0,
             stroke_width: 2.0,
@@ -115,6 +118,18 @@ impl<'a, P: Param> Knob<'a, P> {
     pub fn with_step(mut self, step: f32) -> Self {
         self.step = Some(step);
         self
+    }
+
+    fn begin_drag(&self) {
+        self.setter.begin_set_parameter(self.param);
+    }
+
+    fn end_drag(&self) {
+        self.setter.end_set_parameter(self.param);
+    }
+
+    fn reset_param(&self) {
+        self.setter.set_parameter(self.param, self.param.default_plain_value());
     }
 }
 
