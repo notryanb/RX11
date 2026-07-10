@@ -16,8 +16,9 @@ members = ["xtask"]
 
 [dependencies]
 parking_lot = "0.12"
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "standalone"] }
-nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+egui = { version = "0.35.0", default-features = false, features = ["bytemuck"] }
+nice-plug = { version = "0.1", features = ["assert_process_allocs", "standalone"] }
+nice-plug-egui = "0.2.0"
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["registry"] }
 

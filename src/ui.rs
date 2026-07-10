@@ -1,10 +1,11 @@
-use nih_plug::context::gui::ParamSetter;
-use nih_plug_egui::{egui, widgets};
-use nih_plug_egui::{resizable_window::ResizableWindow};
-use nih_plug_egui::EguiState;
-use crate::egui::{Context, Vec2};
+use nice_plug::context::gui::ParamSetter;
+use nice_plug_egui::{widgets};
+use nice_plug_egui::{resizable_window::ResizableWindow};
+use nice_plug_egui::EguiState;
+use egui::{Ui, Vec2};
 use crate::rotary_slider::{Knob, KnobStyle, LabelPosition};
 use std::sync::Arc;
+
 
 use crate::{EventCollector, GlideMode, PolyMode, Preset, Presets, RX11Params, UiState};
 
@@ -16,7 +17,7 @@ pub enum UiView {
 
 pub fn rx11_egui_ui(
     egui_state: &Arc<EguiState>,
-    egui_ctx: &Context,
+    ui: &mut Ui,
     setter: &ParamSetter,
     state: &mut UiState,
     params: &RX11Params,
@@ -32,7 +33,7 @@ pub fn rx11_egui_ui(
 
     ResizableWindow::new("res-wind")
         .min_size(Vec2::new(800.0, 600.0))
-        .show(egui_ctx, egui_state.as_ref(), |_ui| { 
+        .show(ui, egui_state.as_ref(), |ui| { 
 
             // Load something that makes sound because the synth is initialized
             // without taking presets into consideration. This will also be a good
@@ -47,7 +48,7 @@ pub fn rx11_egui_ui(
                 }
             }
 
-            egui::TopBottomPanel::top("menu").show(egui_ctx, |ui| {
+            egui::Panel::top("menu").show(ui, |ui| {
                 ui.horizontal(|ui| {
                     // Displaying / selecting the presets
                     ui.menu_button("Presets", |ui| {
@@ -79,17 +80,17 @@ pub fn rx11_egui_ui(
                 })
             }); // MENU END
 
-            synth_view(egui_ctx, setter, params);
+            synth_view(ui, setter, params);
 
             if *show_debug {
-                debug_view(egui_ctx, logger);
+                debug_view(ui, logger);
             }
         
     });
 }
 
 fn debug_view(
-    egui_ctx: &Context,
+    egui_ctx: &mut Ui,
     logger: &EventCollector,
 ) {
     egui::Window::new("Logs").min_width(400.0).show(egui_ctx, |ui| {
@@ -112,7 +113,7 @@ fn debug_view(
 }
 
 fn synth_view(
-    egui_ctx: &Context,
+    egui_ctx: &mut Ui,
     setter: &ParamSetter,
     params: &RX11Params
 ) {
@@ -123,8 +124,8 @@ fn synth_view(
         // Also, setting the min/max range on both the Param and here is not ideal.
         let vol_raw = &params.output_level.value();
         let mut vol_raw2 = vol_raw.clone(); // 
-        let vol_min = nih_plug::util::db_to_gain(-30.0);
-        let vol_max = nih_plug::util::db_to_gain(6.0);
+        let vol_min = nice_plug::util::db_to_gain(-30.0);
+        let vol_max = nice_plug::util::db_to_gain(6.0);
         if ui.add(
                 Knob::new(&mut vol_raw2, vol_min, vol_max, KnobStyle::Wiper)
                     .with_label("Volume", LabelPosition::Bottom)
@@ -144,7 +145,7 @@ fn synth_view(
                 let glide_mode = &params.glide_mode.value();
                 ui.horizontal(|ui| {
                     if ui
-                        .add(egui::widgets::SelectableLabel::new(
+                        .add(egui::widgets::Button::selectable(
                             *glide_mode == GlideMode::Off,
                             "Glide Off",
                         ))
@@ -155,7 +156,7 @@ fn synth_view(
                         setter.end_set_parameter(&params.glide_mode);
                     }
                     if ui
-                        .add(egui::widgets::SelectableLabel::new(
+                        .add(egui::widgets::Button::selectable(
                             *glide_mode == GlideMode::Legato,
                             "Legato",
                         ))
@@ -166,7 +167,7 @@ fn synth_view(
                         setter.end_set_parameter(&params.glide_mode);
                     }
                     if ui
-                        .add(egui::widgets::SelectableLabel::new(
+                        .add(egui::widgets::Button::selectable(
                             *glide_mode == GlideMode::Always,
                             "Glide Always",
                         ))
@@ -184,7 +185,7 @@ fn synth_view(
                 let poly_mode = &params.poly_mode.value();
                 ui.horizontal(|ui| {
                     if ui
-                        .add(egui::widgets::SelectableLabel::new(
+                        .add(egui::widgets::Button::selectable(
                             *poly_mode == PolyMode::Mono,
                             "Mono",
                         ))
@@ -195,7 +196,7 @@ fn synth_view(
                         setter.end_set_parameter(&params.poly_mode);
                     }
                     if ui
-                        .add(egui::widgets::SelectableLabel::new(
+                        .add(egui::widgets::Button::selectable(
                             *poly_mode == PolyMode::Poly,
                             "Poly",
                         ))

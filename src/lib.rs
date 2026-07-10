@@ -1,8 +1,9 @@
-use nih_plug::midi::control_change::{
+use egui;
+use nice_plug::midi::control_change::{
     ALL_NOTES_OFF, ALL_SOUND_OFF, MAIN_VOLUME_MSB, MODULATION_MSB,
 };
-use nih_plug::prelude::*;
-use nih_plug_egui::{create_egui_editor, egui, EguiState};
+use nice_plug::prelude::*;
+use nice_plug_egui::{create_egui_editor, EguiState};
 use tracing_subscriber::prelude::*;
 
 use std::sync::Arc;
@@ -564,9 +565,10 @@ impl Plugin for RX11 {
         create_egui_editor(
             self.params.editor_state.clone(),
             self.ui_state.clone(),
-            |_, _| {},
-            move |egui_ctx, setter, state| {
-                rx11_egui_ui(&egui_state, egui_ctx, setter, state, &params, &presets, &logger);
+            Default::default(),
+            |_, _, _| {},
+            move |ui, setter, _queue, gui_state| {
+                rx11_egui_ui(&egui_state, ui, setter, gui_state, &params, &presets, &logger);
             },
         )
     }
@@ -665,7 +667,7 @@ impl Plugin for RX11 {
                                     let _volume_ctrl = value;
                                 }
 
-                                // TODO - unsure of the const for footpedal in nih_plug
+                                // TODO - unsure of the const for footpedal in nice_plug
                                 if cc == 0x40 {
                                     self.synth.is_sustained = value >= 0.5;
 
@@ -820,7 +822,7 @@ impl Plugin for RX11 {
     }
 
     fn deactivate(&mut self) {
-        nih_log!("Deactivation");
+        nice_log!("Deactivation");
     }
 }
 
@@ -844,8 +846,8 @@ impl Vst3Plugin for RX11 {
         &[Vst3SubCategory::Synth, Vst3SubCategory::Instrument];
 }
 
-nih_export_clap!(RX11);
-nih_export_vst3!(RX11);
+nice_export_clap!(RX11);
+nice_export_vst3!(RX11);
 
 // #[cfg(test)]
 // mod tests {
