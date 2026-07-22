@@ -209,7 +209,7 @@ pub struct RX11Params {
 impl Default for RX11Params {
     fn default() -> Self {
         Self {
-            editor_state: EguiState::from_size(80, 600),
+            editor_state: EguiState::from_size(800, 600),
 
             osc_mix: FloatParam::new(
                 "Osc Mix",
@@ -566,7 +566,7 @@ impl Plugin for RX11 {
             self.params.editor_state.clone(),
             self.ui_state.clone(),
             Default::default(),
-            |_, _, _| {},
+            |_egui_ctx, _queue, _gui_state| {},
             move |ui, setter, _queue, gui_state| {
                 rx11_egui_ui(&egui_state, ui, setter, gui_state, &params, &presets, &logger);
             },

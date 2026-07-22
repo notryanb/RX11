@@ -2,7 +2,7 @@ use nice_plug::context::gui::ParamSetter;
 use nice_plug_egui::{widgets};
 use nice_plug_egui::{resizable_window::ResizableWindow};
 use nice_plug_egui::EguiState;
-use egui::{Ui, Vec2};
+use egui::{Margin, Ui, Vec2};
 use crate::rotary_slider::{Knob, KnobStyle, LabelPosition};
 use std::sync::Arc;
 
@@ -34,6 +34,16 @@ pub fn rx11_egui_ui(
     ResizableWindow::new("res-wind")
         .min_size(Vec2::new(800.0, 600.0))
         .show(ui, egui_state.as_ref(), |ui| { 
+            // egui::Frame::new()
+            //     .inner_margin(Margin::same(5))
+            //     .show(ui, |ui| {
+
+            egui::CentralPanel::default().show(ui, |ui| {
+                    let mut v = 1;
+                    egui::widgets::Slider::new(&mut v, 0..=10);
+                    ui.label("Test");  
+                    ui.label(egui::RichText::new("text here").color(egui::Color32::RED));
+            });
 
             // Load something that makes sound because the synth is initialized
             // without taking presets into consideration. This will also be a good
@@ -48,6 +58,7 @@ pub fn rx11_egui_ui(
                 }
             }
 
+                    /*
             egui::Panel::top("menu").show(ui, |ui| {
                 ui.horizontal(|ui| {
                     // Displaying / selecting the presets
@@ -85,6 +96,8 @@ pub fn rx11_egui_ui(
             if *show_debug {
                 debug_view(ui, logger);
             }
+            */
+                // });
         
     });
 }
